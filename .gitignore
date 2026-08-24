@@ -11,9 +11,11 @@ build/
 .env
 *.env
 
-# Data (generated — do not commit CSV files with PII)
-data/*.csv
-data/generation_report.md
+# Data — Day 2 seeded CSVs and generation_report are INTENTIONALLY TRACKED
+# (judge reproducibility requirement; no PII in synthetic data)
+# To re-ignore in future, uncomment these lines:
+# data/*.csv
+# data/generation_report.md
 
 # Models (large binaries)
 models/*.bin
@@ -22,6 +24,8 @@ models/*.pkl
 # Eval artifacts
 eval/*.png
 eval/*.html
+
+# Audit reports are tracked (transparency and handoff protocol)
 
 # Docker
 docker-compose.override.yml

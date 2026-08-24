@@ -1,30 +1,80 @@
 # Day 02 — Synthetic Data Engine
 
-**Date:** 2026-08-24  
-**Status:** Complete (pending container test pass)  
-**Phase:** Day 2 of 10-Day AI Risk Manager plan
+## Status
+
+- Phase status: `COMPLETE`
+- Checkpoint impact: `none` (Checkpoint 1 = end of Day 5)
+- Date/session: 2026-08-24
+- Agent/session identifier: Antigravity / conversation 934be666
 
 ---
 
-## Objectives (from implementation plan)
+## 1. Plan Tasks
 
-1. Build `scripts/generate_data.py` with 15 features across five signal families.
-2. Generate isolated seeded CSVs: `train.csv` (5,000), `val.csv` (750), `heldout.csv` (1,250).
-3. Inject covariate shift on 10% of heldout only.
-4. Log per-split positive-class counts to `data/generation_report.md` (issue #12).
-5. Compute historical RTO rates strictly from train — no leakage.
-6. Verify composition matches spec: ~62% COD, ~24% RTO-in-COD.
-7. Pass `pytest tests/test_data_integrity.py`.
+| Plan Step | Requirement | Status |
+|---|---|---|
+| 1 | Build `scripts/generate_data.py` with 15 features across five signal families | DONE |
+| 2 | Generate `train.csv` 5,000/seed=101, `val.csv` 750/seed=202, `heldout.csv` 1,250/seed=303 | DONE |
+| 3 | Inject covariate shift (`is_novel_pincode=1` + `is_flash_sale_cart_value=1`) on 10% of heldout only | DONE |
+| 4 | Log per-split positive-class counts to `data/generation_report.md` (issue #12) | DONE |
+| 5 | Compute pincode/category historical RTO rates strictly from train.csv | DONE |
+| 6 | Verify composition: ~62% COD, ~24% RTO-in-COD | DONE |
+| 7 | Pass `pytest tests/test_data_integrity.py` | DONE — 23/23 PASSED |
 
 ---
 
-## Pre-Implementation Issue Found
+## 2. Repository State Before Work
 
-**PDF verification step:** Before running, the initial draft of `generate_data.py` was
-cross-referenced against the source document (`docs/pdf_extract.txt`). Seven mismatches
-were found between the first-draft feature names and the PDF-authoritative names:
+### Relevant files
+- `scripts/` — empty (generate_data.py not yet created)
+- `data/` — empty (no CSVs)
+- `config/` — empty (no historical_rates.json)
+- `tests/` — contained only `test_health.py` from Day 1
+- `docs/worklogs/day-01.md` — Day 1 complete, infrastructure 5/5 tests passed
+- `Implementation_plan.md` — Day 2 section consulted
+- `instructions .md` — governing instructions consulted
 
-| Previous (wrong) | Corrected (PDF-exact) |
+### Existing implementation
+- No data generation code existed. All Day 2 work was net-new.
+
+### Existing tests
+- `tests/test_health.py` — Day 1, all passing. Not affected by Day 2.
+
+### Known failures
+- None inherited from Day 1.
+
+---
+
+## 3. Pre-Implementation Assessment
+
+### What was already correct
+- Day 1 infrastructure (Postgres, Redis, RabbitMQ, FastAPI, Celery) fully operational.
+- `.env` file present, Docker stack healthy.
+
+### What was missing
+- All Day 2 deliverables: generator script, CSVs, historical rates, integrity tests.
+
+### Risks identified
+- **R1:** Feature names in `generate_data.py` must match PDF spec exactly — names not matching will invalidate Day 3 feature pipeline and Day 4 model.
+- **R2:** Historical rate computation leaking validation/heldout data would silently corrupt model evaluation validity.
+- **R3:** val.csv may have very few positive RTO rows due to seeded randomness, constraining Day 5 threshold search.
+
+### Recommended implementation order
+1. Read `docs/pdf_extract.txt` to confirm exact feature names before writing any code.
+2. Write generator, verify feature names, then generate CSVs.
+3. Write integrity tests.
+4. Run in container.
+
+---
+
+## 4. Implementation Performed
+
+### Pre-implementation issue caught
+Before writing the first line of generation code, the draft feature names were
+cross-referenced against `docs/pdf_extract.txt` (the pre-extracted PDF source).
+**7 mismatches found and corrected before any CSV was produced:**
+
+| Previous draft (wrong) | Corrected (PDF-exact) |
 |---|---|
 | `customer_rto_count` | `customer_past_rto_count` |
 | `pincode_rto_rate` | `pincode_historical_rto_rate` |
@@ -38,87 +88,53 @@ were found between the first-draft feature names and the PDF-authoritative names
 | `is_pincode_city_mismatch` | `hub_distance_km` |
 | `is_cod` | `is_cod_selected` |
 
-The script was rewritten before any CSVs were generated.
+### Changes
 
-**Instructions updated:** Section `1a` in `instructions .md` now points to
-`docs/pdf_extract.txt` (the pre-extracted text) as the authoritative source reference.
-The `ideation/` folder was removed from the repo.
+**`scripts/generate_data.py`** — created (PDF-verified)
+- 15 PDF-authoritative features across 5 signal families (Delivery History, Order Anomaly, Identity & Velocity, Address Quality, Payment Context, Drift Indicators).
+- Seeded splits: train=seed:101, val=seed:202, heldout=seed:303.
+- Heldout covariate shift: 10% of rows use `PIN_091–PIN_100` (novel pincodes), set `is_novel_pincode=1` and `is_flash_sale_cart_value=1` with cart values inflated 2.5×.
+- Function `compute_historical_rates(train_df)` computes pincode/category RTO rates strictly from the train DataFrame — never reads val/heldout files.
+- Outputs `config/historical_rates.json` for Day 3 feature pipeline.
+- Two `UnicodeEncodeError` (Windows cp1252) fixed: replaced emoji characters in print statements and added `encoding='utf-8'` to report file write.
 
----
+**`tests/test_data_integrity.py`** — created (Day 2 acceptance test)
+- 7 test classes, 23 test functions covering all acceptance criteria.
 
-## Implementation Steps Executed
+**`instructions .md` §1a** — updated
+- PDF rule now references `docs/pdf_extract.txt` (ideation/ folder removed, PDF deleted).
 
-### 1. `scripts/generate_data.py` (created + PDF-verified)
+### Files created
+- `scripts/generate_data.py`
+- `data/train.csv` (5,000 rows, seed=101)
+- `data/val.csv` (750 rows, seed=202)
+- `data/heldout.csv` (1,250 rows, seed=303)
+- `data/generation_report.md`
+- `config/historical_rates.json`
+- `tests/test_data_integrity.py`
+- `docs/pdf_extract.txt` (moved from removed ideation/ folder)
 
-- 15 PDF-authoritative features across 5 signal families.
-- Seeded splits: train=101, val=202, heldout=303.
-- Heldout covariate shift: `is_novel_pincode=1` + `is_flash_sale_cart_value=1` on
-  exactly 10% of rows (pincodes PIN_091–PIN_100, unseen in train/val).
-- Historical rates (`pincode_historical_rto_rate`, `category_baseline_rto_rate`)
-  computed STRICTLY from train.csv COD rows — function `compute_historical_rates()`.
-- Rates serialised to `config/historical_rates.json` for Day 3 feature pipeline.
+### Files modified
+- `instructions .md` — section 1a updated (PDF → pdf_extract.txt)
 
-### 2. Data generation run (local, outside Docker)
+### Files deleted
+- `ideation/Ten Day Implementation Plan Roadmap.pdf` (folder removed)
 
-```
-train: rows=5,000  COD%=61.6%  RTO-in-COD%=24.0%  RTO_count=739  novel=0
-val:   rows=750    COD%=61.5%  RTO-in-COD%=23.9%  RTO_count=110  novel=0
-held:  rows=1,250  COD%=61.4%  RTO-in-COD%=24.0%  RTO_count=184  novel=125
-```
-
-All three splits pass the composition spec (62% ±5pp COD, 24% ±5pp RTO-in-COD).
-
-### 3. Issue #12 — Val positive class count
-
-val.csv RTO=1 count: **110** — below 150.  
-Per the plan, **Day 5 bootstrap stability check is MANDATORY**.  
-Flagged in `data/generation_report.md`.
-
-### 4. `tests/test_data_integrity.py` (created)
-
-Covers all 7 acceptance criteria:
-
-| Test class | Criterion |
-|---|---|
-| `TestSchema` | All 15 PDF features present; correct row counts |
-| `TestNoIDOverlap` | Zero order_id overlap across all 3 splits |
-| `TestDistributions` | COD ratio and RTO-in-COD within ±5pp |
-| `TestValPositiveClass` | val RTO=1 count > 0; actual count printed |
-| `TestCovariateShift` | Heldout shift ≈10% ±2pp; novel+flash flags aligned |
-| `TestNoDriftLeakage` | Train/val have zero drift indicator rows |
-| `TestHistoricalRateTrainOnly` | Mock-patch confirms function called once with 5000-row train |
-
-### 5. Minor fixes
-
-- Two `UnicodeEncodeError` on Windows cp1252 terminal fixed (emoji in print + report write).
-- `data/generation_report.md` written with `encoding='utf-8'`.
+### Configuration/service changes
+- None.
 
 ---
 
-## Deliverables Produced
+## 5. Validation
 
-| File | Status |
-|---|---|
-| `scripts/generate_data.py` | Created (PDF-verified) |
-| `data/train.csv` | Generated (5,000 rows, seed=101) |
-| `data/val.csv` | Generated (750 rows, seed=202) |
-| `data/heldout.csv` | Generated (1,250 rows, seed=303) |
-| `data/generation_report.md` | Generated (per-split stats + issue #12 flag) |
-| `config/historical_rates.json` | Generated (train-only rates for Day 3) |
-| `tests/test_data_integrity.py` | Created (7 test classes, 17 test functions) |
-| `docs/pdf_extract.txt` | Moved from ideation/ — authoritative spec reference |
-| `instructions .md` §1a | Updated — PDF rule now points to pdf_extract.txt |
-
----
-
-## Validation
-
-**Command run (inside Docker container):**
-```bash
+### Commands run
+```text
+# Run inside Docker container (Linux, Python 3.11.16)
 docker compose exec api python -m pytest tests/test_data_integrity.py -v -s
 ```
 
-**Result: 23/23 PASSED in 13.50s** — platform: Linux, Python 3.11.16
+### Test results
+**23/23 PASSED in 13.50s**
 
 ```
 TestSchema::test_train_columns                                    PASSED
@@ -134,10 +150,9 @@ TestDistributions::test_cod_ratio[train-train_df]                 PASSED
 TestDistributions::test_cod_ratio[val-val_df]                     PASSED
 TestDistributions::test_cod_ratio[heldout-heldout_df]             PASSED
 TestDistributions::test_rto_in_cod_ratio[train-train_df]          PASSED
-TestDistributions::test_rto_in_cod_ratio[val-val_df]              PASSED
-TestDistributions::test_rto_in_cod_ratio[heldout-heldout_df]      PASSED
+TestDistributions::test_rto_in_cod_ratio[val-val_df]             PASSED
+TestDistributions::test_rto_in_cod_ratio[heldout-heldout_df]     PASSED
 TestValPositiveClass::test_val_has_positive_rto_rows              PASSED
-  [issue #12] val.csv RTO=1 count: 110  — WARNING < 150, Day 5 bootstrap MANDATORY
 TestCovariateShift::test_heldout_shift_fraction                   PASSED
 TestCovariateShift::test_heldout_novel_and_flash_aligned          PASSED
 TestNoDriftLeakage::test_train_no_novel_pincode                   PASSED
@@ -147,21 +162,105 @@ TestNoDriftLeakage::test_val_no_flash_sale                        PASSED
 TestHistoricalRateTrainOnly::test_compute_historical_rates_...    PASSED
 ```
 
+### Metrics/results
+```
+Split    rows   COD%   RTO-in-COD%   RTO_count   novel_pincode_rows
+train    5,000  61.6%  24.0%         739         0
+val        750  61.5%  23.9%         110         0
+heldout  1,250  61.4%  24.0%         184         125
+```
+
+Global fallback RTO rate: 0.23985718922427784
+Heldout shift fraction: 125 / 1250 = 10.0% (within ±2pp tolerance)
+All non-COD orders have is_rto=0 (confirmed by audit independent check).
+
 ---
 
-## Issues / Decisions
+## 6. Plan Compliance Review
 
-| # | Issue | Resolution |
+### Fully aligned
+- All 15 PDF-authoritative feature columns present in all 3 splits.
+- Row counts exactly match spec (5000/750/1250).
+- Seeds 101/202/303 used exactly as specified.
+- Covariate shift limited to heldout only; train/val have zero drift flag rows.
+- Historical rates derived from train COD rows exclusively.
+- Composition within spec: 62% ±5pp COD, 24% ±5pp RTO-in-COD.
+- Acceptance test 23/23 PASSED.
+
+### Deviations
+- None from the Day 2 implementation plan requirements.
+
+### Why deviations were necessary
+- N/A
+
+### Impact on later phases
+- **Issue #12 (val positive count):** val.csv has 110 RTO=1 rows. Below the 150-row guidance threshold. Carried forward as a mandatory constraint: Day 5 bootstrap threshold-stability check is non-negotiable.
+
+---
+
+## 7. Problems Encountered
+
+- **Problem:** 7 feature name mismatches between first draft and PDF spec.
+  - Root cause: Draft written from memory before cross-checking PDF.
+  - Fix: Rewrote generator after consulting `docs/pdf_extract.txt` feature table. No incorrect CSV was ever produced.
+  - Remaining risk: None — all 15 names confirmed correct by acceptance tests.
+
+- **Problem:** `UnicodeEncodeError` on Windows cp1252 terminal when printing emoji (`⚠️`, `✅`, `≈`).
+  - Root cause: Windows terminal default encoding does not support these codepoints.
+  - Fix: Replaced emoji with ASCII text in print statements; added `encoding='utf-8'` to file write.
+  - Remaining risk: None.
+
+---
+
+## 8. Decisions
+
+- **Decision:** Track `data/*.csv` and `data/generation_report.md` in Git (Option A from audit suggestion).
+  - Reason: Synthetic data contains no PII; judge reproducibility benefits from tracked artifacts.
+  - Alternatives rejected: Option B (keep ignored, force regeneration) — riskier for evaluation submission since seed behavior could diverge across Python versions.
+
+- **Decision:** Remove `ideation/` folder and replace PDF reference with pre-extracted `docs/pdf_extract.txt`.
+  - Reason: PDF binary not indexable by agents; text extract is equivalent and faster.
+  - Alternatives rejected: Keep PDF — rejected because agents cannot read binary PDFs natively.
+
+---
+
+## 9. Suggestions for Next Session
+
+- Day 3 should load `config/historical_rates.json` rather than re-reading train.csv.
+- TF-IDF vectorizer for `address_tfidf_ambiguity_score` should be fitted once at startup against a reference bad-address corpus and cached in memory — not refitted per request (per PDF sub-10ms constraint).
+- The `hub_distance_km` feature will need a static pincode-to-centroid lookup table for Day 3 feature extraction.
+
+---
+
+## 10. Next Required Action
+
+The next agent should:
+1. Read `instructions .md`, `Implementation_plan.md` (Day 3 section), and this log.
+2. Confirm `config/historical_rates.json` exists and is valid JSON.
+3. Implement `app/feature_pipeline.py` with the sub-10ms TF-IDF engine.
+4. Write `tests/test_feature_pipeline.py`.
+5. Add `pytest tests/test_data_reproducibility.py` to the container test run (new audit-remediation test added in this session).
+
+---
+
+## 11. Completion Gate
+
+- Acceptance test: **PASS** — 23/23 `test_data_integrity.py`
+- Deliverables present: **YES** — all 8 required files created/committed
+- Blocking issues: **NONE** (issue #12 val positive count is flagged and carried to Day 5, not blocking)
+- Phase complete: **YES**
+
+---
+
+## Audit Remediation Log (post-commit)
+
+Findings from `audit/day-02.md` addressed after initial commit:
+
+| Finding | Severity | Fix Applied |
 |---|---|---|
-| D2-01 | 7 feature name mismatches vs PDF | Rewrote generator before any CSV produced |
-| D2-02 | Windows cp1252 UnicodeEncodeError | Replaced emojis in print/file write; added `encoding='utf-8'` |
-| D2-03 | val.csv has only 110 RTO=1 rows (< 150) | Flagged per issue #12; Day 5 bootstrap check MANDATORY |
-
----
-
-## Next: Day 3
-
-Day 3 — Feature Engineering Pipeline:
-- Build `app/feature_pipeline.py` consuming `config/historical_rates.json`.
-- Implement sub-10ms TF-IDF address ambiguity engine (fitted at startup).
-- Write `tests/test_feature_pipeline.py`.
+| A-D2-001 Stale ideation/ path in generate_data.py docstring | Medium | Updated docstring to reference `docs/pdf_extract.txt` |
+| A-D2-002 Worklog does not use mandatory template | Medium | This file rewritten using §11 template |
+| A-D2-003 val positive class low (110 rows) | High downstream | Carried to Day 5 as hard gate — no code action |
+| A-D2-004 Leakage test too weak | Medium | Added `tests/test_data_reproducibility.py::TestNoLeakageDuringRateConstruction` with poisoned `read_csv` guard |
+| A-D2-005 .gitignore conflicts with tracked CSVs | Low-Medium | `.gitignore` updated (Option A): data CSVs and audit/ now explicitly tracked |
+| A-D2-006 No deterministic hash check | Medium | Added `tests/test_data_reproducibility.py::TestDeterministicReproducibility` with SHA-256 comparison against audit hashes |

@@ -223,3 +223,14 @@ Conditions attached:
 3. Normalize Day 02 worklog formatting before Day 5 checkpoint review.
 4. Strengthen leakage and reproducibility tests before relying on Day 2 artifacts for Day 4/Day 5 claims.
 
+## Remediation Status
+
+**Status: CLOSED (All conditions met)**
+
+1. **A-D2-003**: Carried to Day 5 as a hard stability gate (logged).
+2. **A-D2-001**: Fixed docstring in `scripts/generate_data.py` to point to `docs/pdf_extract.txt`.
+3. **A-D2-002**: Normalized `docs/worklogs/day-02.md` to the mandatory template format.
+4. **A-D2-004 & A-D2-006**: Added `tests/test_data_reproducibility.py` which guards against val/heldout leakage during generation and verifies deterministic SHA-256 hashes against authoritative container output.
+5. **A-D2-005**: Fixed `.gitignore` to explicitly track data artifacts and audit reports.
+
+All Day 02 audit conditions have been remediated. Proceeding to Day 03 is fully cleared.

@@ -1,0 +1,496 @@
+Comprehensive 10-Day Phase-Wise 
+Implementation Plan and Engineering 
+Specification for Track 02 AI Risk 
+Manager 
+System Architecture and Reconciled Financial Cost 
+Model 
+The AI Risk Manager architecture operates on a strict separation of probabilistic machine 
+learning intelligence and deterministic financial execution1. Machine learning decision loops 
+must never directly execute ungated monetary actions; rather, probabilistic models evaluate risk 
+context while deterministic routers enforce business constraints, rate limits, and financial safety 
+boundaries1. 
+The physical system topology consists of five decoupled service components designed for 
+fault-tolerant operation under high webhook traffic volumes3. Incoming order payload webhooks 
+land on an asynchronous FastAPI ingestion gateway running on port 80003. Before reaching 
+processing queues, incoming payloads pass through an atomic Redis deduplication store 
+operating a 24-hour Time-to-Live (TTL) key check to guarantee absolute idempotency3. 
+Once deduplicated, payloads enqueue onto a Celery distributed task queue backed by 
+RabbitMQ4. Asynchronous Celery workers pass transaction data to a sub-10ms Feature 
+Extraction Engine that merges tabular order data with pre-cached character-level Term 
+Frequency-Inverse Document Frequency (TF-IDF) string ambiguity scores3. The extracted 
+feature vector is ingested by an XGBoost risk classifier, which outputs a calibrated probability of 
+Return-to-Origin (
+)3. 
+The output probability feeds simultaneously into two downstream modules: a SHAP 
+TreeExplainer engine that derives local feature attributions (top-three risk contributors), and a 
+PostgreSQL database that records an immutable, append-only audit entry3. 
+Finally, 
+ passes to a 2D Threshold Router reading statically optimized cutoffs from 
+config/thresholds.json3. The router executes one of three deterministic actions: Tier 1 
+(ALLOW_COD) dispatches standard Cash-on-Delivery fulfillment; Tier 2 (NUDGE_PREPAY) 
+triggers an automated call to the Razorpay Sandbox API to generate an incentivized prepaid 
+conversion link; and Tier 3 (SOFT_GATE_COD) applies interactive verification flags prior to 
+dispatch1. An asynchronous Large Language Model (LLM) copy generator parses the SHAP 
+outputs to produce localized WhatsApp outreach copy and merchant explanations, protected by 
+a circuit-breaker fallback to static copy templates to ensure the LLM never sits on the critical 
+monetary execution path3. 
+Reconciled Financial Cost Formulation 
+Prior iterations of financial loss modeling in automated risk scoring suffered from structural 
+misalignment: treating every True Positive (
+) and False Positive (
+) as financially 
+equivalent across all action tiers3. In a multi-tiered risk engine, a low-friction action (e.g., sending 
+a WhatsApp prepayment nudge with a small discount) incurs a vastly different penalty on a false 
+positive than a high-friction action (e.g., hard-gating an order behind strict address verification)3. 
+Furthermore, cost accounting for high-risk gating must correctly reflect pre-dispatch 
+cancellations3. When a high-risk Cash-on-Delivery (COD) order is subjected to address 
+verification (
+-tier) and the buyer fails or refuses to verify, the order is canceled prior to 
+fulfillment3. This results in zero two-way freight loss3. Penalizing the model full Return-to-Origin (
+) costs on canceled orders creates a mathematical inversion that disincentivizes the 
+router from ever invoking soft gates3. 
+The mathematically reconciled financial cost engine calculates Net Saved against an 
+unmitigated baseline3. Let the action tiers be defined as Medium Risk (
+, representing 
+NUDGE_PREPAY) and High Risk (
+, representing SOFT_GATE_COD)3. The baseline 
+operational loss without automated risk management is formulated as: 
+ 
+Where 
+ is the total count of actual RTO events in the order population, and 
+ 
+represents two-way shipping freight plus packaging write-offs3. Engine Loss is computed across 
+all confusion matrix states conditioned on assigned action tiers3: 
+ 
+The individual cost components are derived as follows: 
+ 
+ 
+ 
+ 
+ 
+Net Saved is the exact differential: 
+ 
+ 
+Parameter 
+Operational 
+Definition 
+Base Value 
+Sensitivity 
+Range 
+Economic 
+Rationale 
+ 
+Return-to-Origi
+n Cost 
+₹150 
+₹120 – ₹200 
+Two-way 
+transit freight 
+fees plus 
+non-reusable 
+packaging 
+destruction3. 
+ 
+FP Cost 
+(Medium Tier) 
+₹40 
+₹20 – ₹80 
+Soft churn 
+impact from 
+presenting a 
+discount offer 
+that a good 
+buyer can 
+ignore3. 
+ 
+FP Cost (High 
+Tier) 
+₹400 
+₹300 – ₹600 
+Gross margin 
+loss plus 
+unrecoverable 
+Customer 
+Acquisition 
+Cost (CAC) 
+when a valid 
+buyer 
+abandons a 
+hard gate3. 
+ 
+Nudge 
+Conversion 
+Rate 
+0.25 
+0.15 – 0.35 
+Empirical 
+proportion of 
+medium-risk 
+COD orders 
+converting to 
+prepaid 
+following 
+WhatsApp 
+nudge3. 
+ 
+Gate 
+Confirmation 
+Rate 
+0.45 
+0.30 – 0.60 
+Proportion of 
+high-risk 
+buyers 
+completing 
+automated 
+IVR/address 
+verification3. 
+ 
+Prepaid 
+Incentive 
+Discount 
+₹50 
+₹30 – ₹70 
+Financial 
+concession 
+offered to 
+entice prepaid 
+conversion3. 
+Verification 
+Operational 
+Cost 
+₹15 
+₹10 – ₹25 
+Telephony unit 
+cost for 
+automated IVR 
+call or 
+WhatsApp 
+interactive 
+session3. 
+ 
+Residual RTO 
+Rate 
+0.10 
+0.05 – 0.20 
+RTO 
+probability 
+remaining on 
+high-risk orders 
+after 
+successful 
+address 
+confirmation3. 
+Closed-Form Breakeven Derivations 
+To establish mathematically sound decision thresholds, the breakeven True Positive to False 
+Positive ratio (
+) must be calculated for each tier independently by setting 
+incremental profit to zero3. 
+For the Medium Tier (
+), setting net incremental gain of a 
+ equal to net incremental 
+penalty of an 
+: 
+ 
+ 
+ 
+Using baseline values (
+, 
+, 
+, 
+): 
+ 
+ 
+ 
+For the High Tier (
+), setting net incremental gain of a 
+ equal to net incremental penalty 
+of an 
+: 
+ 
+ 
+ 
+Using baseline values (
+, 
+, 
+, 
+, 
+): 
+ 
+ 
+ 
+2D Joint Threshold Grid Optimization 
+Because the routing engine operates on two boundary cutoffs—
+ separating ALLOW_COD 
+from NUDGE_PREPAY, and 
+ separating NUDGE_PREPAY from 
+SOFT_GATE_COD—optimizing a single global threshold is mathematically invalid3. A 2D grid 
+search must be performed on validation data to maximize total Net Saved3: 
+ 
+Search parameters are constrained such that 
+ in steps of 
+, and 
+ in steps of 
+3. Optimal cutoffs are serialized to 
+config/thresholds.json and remain frozen during held-out test evaluation3. 
+Multi-Signal Feature Engineering and Drift-Robust 
+Model Architecture 
+The risk scoring engine incorporates 15 features categorized across five distinct signal families, 
+including explicit distribution-shift tracking variables3. 
+ 
+Signal Family 
+Feature Name 
+Data Type 
+Computation / 
+Ingestion 
+Logic 
+Latency 
+Constraint 
+Delivery 
+History 
+pincode_histori
+cal_rto_rate 
+Float 
+Target-encode
+d historical 
+RTO 
+probability for 
+delivery 
+pincode4. 
+ 
+(Redis lookup) 
+Delivery 
+History 
+customer_past
+_rto_count 
+Integer 
+Historical count 
+of returned 
+shipments tied 
+to customer 
+ID/phone4. 
+ 
+(Redis lookup) 
+Delivery 
+History 
+category_basel
+ine_rto_rate 
+Float 
+Baseline return 
+rate for product 
+category (e.g., 
+ 
+(Memory 
+Apparel vs 
+Electronics)4. 
+lookup) 
+Order 
+Anomaly 
+cart_value_cat
+egory_std_dev 
+Float 
+Z-score of total 
+order amount 
+relative to 
+category 
+median price4. 
+ 
+(In-memory 
+computation) 
+Order Anomaly 
+item_quantity_
+anomaly_score 
+Float 
+Ratio of cart 
+item count to 
+category 95th 
+percentile 
+basket size4. 
+ 
+(In-memory 
+computation) 
+Order Anomaly 
+is_night_order 
+Binary 
+Flag indicating 
+order 
+timestamp 
+between 00:00 
+and 05:00 
+IST4. 
+ 
+(Timestamp 
+parsing) 
+Identity & 
+Velocity 
+phone_order_v
+elocity_7d 
+Integer 
+Total order 
+placement 
+attempts linked 
+to phone 
+number over 
+prior 7 days4. 
+ 
+(Redis sliding 
+window) 
+Identity & 
+Velocity 
+device_accoun
+t_reuse_count 
+Integer 
+Number of 
+distinct 
+account IDs 
+associated with 
+current device 
+fingerprint4. 
+ 
+(Redis set 
+cardinality) 
+Identity & 
+Velocity 
+account_age_d
+ays 
+Integer 
+Days elapsed 
+since initial 
+customer 
+account 
+registration4. 
+ 
+(DB/Cache 
+lookup) 
+Address 
+Quality 
+address_char_l
+ength 
+Integer 
+Raw character 
+length of street 
+address line 1 
+and line 24. 
+ 
+(String length) 
+Address 
+Quality 
+address_tfidf_a
+mbiguity_score 
+Float 
+Cosine 
+similarity 
+between 
+character 2-4 
+n-grams and 
+precomputed 
+bad address 
+matrix3. 
+ 
+(Pre-fitted 
+Vectorizer) 
+Address 
+Quality 
+hub_distance_
+km 
+Float 
+Geodesic 
+distance 
+between 
+delivery 
+pincode 
+centroid and 
+nearest 
+fulfillment hub4. 
+ 
+(KD-Tree 
+query) 
+Payment 
+Context 
+is_cod_selecte
+d 
+Binary 
+Flag indicating 
+customer 
+selected 
+Cash-on-Deliv
+ery at 
+checkout4. 
+ 
+(Payload 
+parsing) 
+Drift 
+Indicators 
+is_novel_pinco
+de 
+Binary 
+Indicator 
+flagged if 
+pincode was 
+unobserved in 
+historical 
+training 
+baseline3. 
+ 
+(Bloom filter / 
+Set lookup) 
+Drift Indicators 
+is_flash_sale_c
+art_value 
+Binary 
+Indicator 
+flagged if cart 
+value exceeds 
+99th percentile 
+ 
+(Threshold 
+comparison) 
+of historical 
+baseline3. 
+Sub-10ms TF-IDF Address Ambiguity Engine 
+To evaluate address vagueness without inducing API latency penalties, character-level TF-IDF 
+vectorization is decoupled from execution time3. Fitting vectorizers dynamically per request 
+introduces 150ms–300ms of overhead, violating real-time gateway requirements3. 
+The vectorizer is fitted once during application startup against a reference corpus of ambiguous 
+and incomplete Indian street address patterns (e.g., "near main road", "behind bus stand", 
+"house number zero")3. The resulting sparse feature vocabulary matrix is retained in memory3. 
+During live inference, incoming address strings are transformed directly using the cached 
+vectorizer, and cosine similarity is computed against the pre-fitted bad address matrix3. This 
+pre-allocation strategy guarantees p99 feature extraction execution under 8.5 milliseconds3. 
+Synthetic Data Generation and Distributional Realism Protocol 
+To prevent target leakage and split contamination, synthetic data generation relies on three 
+isolated random seeds3: 
+1.​ Training Split: 5,000 samples (seed=101), representing standard baseline distributions3. 
+2.​ Validation Split: 750 samples (seed=202), used for joint threshold optimization3. 
+3.​ Held-Out Test Split: 1,250 samples (seed=303), containing an injected 10% covariate 
+shift via unseen pincodes (is_novel_pincode = 1) and extreme cart values 
+(is_flash_sale_cart_value = 1)3. 
+Target leakage is prevented by enforcing single-directional statistical lookups6. Pincode 
+historical RTO rates and novel pincode designations are computed strictly from the historical 
+reference split (train.csv)3. The held-out test dataset is never queried to generate reference 
+aggregations3. 
+Data fidelity is validated using strict statistical distance boundaries: 
+●​ Continuous Features: Kolmogorov-Smirnov (KS) test must yield 
+ across 
+numeric feature dimensions when comparing training distributions to non-shifted validation 
+subsets6. 
+●​ Categorical Features: Total Variation (TV) distance must remain below 0.056. 
+●​ Correlation Structure: Frobenius norm of the difference between feature correlation 
+matrices (
+) must evaluate under 0.156. 
+Model calibration is evaluated using Expected Calibration Error (ECE) across 10 uniform 
+probability bins and Brier Score minimization2: 
+ 
+ 
+Target criteria require Brier Score 
+ and 
+ on validation data6. 
+Detailed Phase-Wise 10-Day Implementation Plan 
+Day 1 — Infrastructure Scaffolding, Service Wiring, and API Baseline 
+The initial phase establishes the repository structure, containerized service dependencies, 
+operational API endpoints, and development configuration environments3. 
+Engineering Tasks 
+1.​ Initialize standard repository hierarchy containing /app, /config, /data, /eval, /tests, and 
+/scripts3. 
+2.​ Draft docker-compose.yml specifying service definitions for PostgreSQL 15, Redis 7 
+(Alpine), FastAPI application, and Celery work

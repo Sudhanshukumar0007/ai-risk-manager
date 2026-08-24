@@ -22,6 +22,31 @@ Source: `implementation_plan.md`.
 
 ---
 
+## 1a. Source Document Reference Rule
+
+The original source document for this project has been pre-extracted to:
+
+```
+docs/pdf_extract.txt
+```
+
+The `ideation/` folder and the original PDF no longer exist in the repo.
+`docs/pdf_extract.txt` is the **sole authoritative reference** for raw specification content (feature names, financial parameters, statistical thresholds).
+
+**When to consult `docs/pdf_extract.txt`:**
+The agent MUST read this file **only when `implementation_plan.md` explicitly instructs it to do so** — for example, a phrase like *"as specified in the feature table"* or *"confirm the threshold from the source document"* is a trigger.
+
+**When NOT to consult it:**
+Do not read it for general context or curiosity. Use `implementation_plan.md` as the sole day-to-day guide. The corrected plan already incorporates the verified content.
+
+**If a value is genuinely absent:**
+Use the fallback gate list defined in `implementation_plan.md` — do not invent a value.
+
+**If `docs/pdf_extract.txt` conflicts with `implementation_plan.md`:**
+`implementation_plan.md` takes precedence — it is the audited, corrected version.
+
+---
+
 # 2. Mandatory Agent Startup Procedure
 
 Every agent session MUST begin by following this exact order.

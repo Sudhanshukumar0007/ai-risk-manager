@@ -1,0 +1,131 @@
+version: "3.9"
+
+# ── Shared network ────────────────────────────────────────────────────────────
+networks:
+  risk_net:
+    driver: bridge
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  pg_data:
+  rabbitmq_data:
+
+services:
+  # ── 1. PostgreSQL 15 ────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: risk_postgres
+    restart: unless-stopped
+    networks: [risk_net]
+    environment:
+      POSTGRES_USER: risk_user
+      POSTGRES_PASSWORD: risk_pass
+      POSTGRES_DB: risk_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U risk_user -d risk_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── 2. Redis 7 (Alpine) ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: risk_redis
+    restart: unless-stopped
+    networks: [risk_net]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── 3. RabbitMQ 3 (with management UI) ─────────────────────────────────────
+  # Decision: using RabbitMQ (not Redis) as the Celery broker.
+  # Reason: the architecture narrative explicitly states Celery-over-RabbitMQ;
+  # this avoids the silent mismatch flagged in issue #4 of the audit.
+  # Management UI available at http://localhost:15672 (guest/guest).
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: risk_rabbitmq
+    restart: unless-stopped
+    networks: [risk_net]
+    environment:
+      RABBITMQ_DEFAULT_USER: risk_user
+      RABBITMQ_DEFAULT_PASS: risk_pass
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── 4. FastAPI application ──────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: risk_api
+    restart: unless-stopped
+    networks: [risk_net]
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/workspace
+      - /workspace/.venv
+    working_dir: /workspace
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── 5. Celery worker ────────────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: risk_celery
+    restart: unless-stopped
+    networks: [risk_net]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    volumes:
+      - .:/workspace
+      - /workspace/.venv
+    working_dir: /workspace
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s

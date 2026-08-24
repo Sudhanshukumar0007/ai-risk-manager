@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Environment
+.env
+*.env
+
+# Data (generated — do not commit CSV files with PII)
+data/*.csv
+data/generation_report.md
+
+# Models (large binaries)
+models/*.bin
+models/*.pkl
+
+# Eval artifacts
+eval/*.png
+eval/*.html
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

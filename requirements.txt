@@ -1,0 +1,51 @@
+# Core API
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.4
+pydantic-settings==2.3.3
+
+# Database
+sqlalchemy==2.0.31
+asyncpg==0.29.0
+alembic==1.13.2
+psycopg2-binary==2.9.9
+
+# Redis
+redis==5.0.7
+
+# Async AMQP (RabbitMQ health check + future Celery wiring)
+aio-pika==9.4.2
+
+# Celery + RabbitMQ broker
+celery==5.4.0
+kombu==5.3.4
+
+# Razorpay
+razorpay==1.4.1
+
+# ML stack
+xgboost==2.1.0
+scikit-learn==1.5.1
+shap==0.45.1
+pandas==2.2.2
+numpy==1.26.4
+
+# LLM
+anthropic==0.30.0
+
+# Dashboard
+streamlit==1.36.0
+plotly==5.22.0
+
+# HTTP client
+httpx==0.27.0
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+pytest-httpx==0.30.0
+requests==2.32.3
+
+# Dev / utilities
+python-dotenv==1.0.1
+python-multipart==0.0.9

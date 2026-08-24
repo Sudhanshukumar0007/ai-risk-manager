@@ -264,3 +264,4 @@ Findings from `audit/day-02.md` addressed after initial commit:
 | A-D2-004 Leakage test too weak | Medium | Added `tests/test_data_reproducibility.py::TestNoLeakageDuringRateConstruction` with poisoned `read_csv` guard |
 | A-D2-005 .gitignore conflicts with tracked CSVs | Low-Medium | `.gitignore` updated (Option A): data CSVs and audit/ now explicitly tracked |
 | A-D2-006 No deterministic hash check | Medium | Added `tests/test_data_reproducibility.py::TestDeterministicReproducibility` with SHA-256 comparison against audit hashes |
+| (Follow-up) Test hash failures due to OS mismatch | Low | Updated `AUDIT_HASHES` to use authoritative Linux/Python 3.11 container hashes (Windows/Python 3.14 hashes caused false failures) |

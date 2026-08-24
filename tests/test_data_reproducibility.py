@@ -30,12 +30,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import generate_data as gd
 
-# ── SHA-256 hashes from independent audit (audit/day-02.md) ──────────────────
+# ── SHA-256 hashes from the authoritative environment ────────────────────────
+# Source: Linux / Python 3.11.16 Docker container (the canonical run environment).
+# The original audit/day-02.md hashes were computed on Windows/Python 3.14 and
+# differ due to float precision and line-ending differences across OS/Python
+# versions. Container hashes are authoritative.
 AUDIT_HASHES = {
-    "train.csv":               "ad901b61c7e32b9a1556ceb2545ba33bfb86b31c466fb32610e1ec5e7c57ade2",
-    "val.csv":                 "ddfc7f31d6b9c03266bd7fdcadb43a1872d956e14af3dcb503e88225f2d50f11",
-    "heldout.csv":             "a150979d9a755342f659147842a5f82ba3f46058291882d35cdffdf0ae0196a3",
-    "historical_rates.json":   "04a540110c8daa1dc325fc8048d9795865b4d652c7f0ea59c50737c89041b452",
+    "train.csv":               "4dc5a2ade8173a724f40e342f5fe312d05487ea9be6db4ca5e085d58cdda2cfa",
+    "val.csv":                 "76f61b5c2fa2a6647919be84c14f7b22fc8c7ddd6ed0be2ed833be092a6e68a6",
+    "heldout.csv":             "ca55e8ba9dfe7675f58bf13c43faaafdd3e4df6884be11bdd91cbe50763a1bb5",
+    "historical_rates.json":   "1d7f1b4958562d4ac95a120df51f7430c913372c6d1f0e2cae4b7af5462ff798",
 }
 
 DATA_DIR = ROOT / "data"

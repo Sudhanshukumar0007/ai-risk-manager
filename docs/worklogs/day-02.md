@@ -60,7 +60,7 @@
 - **R3:** val.csv may have very few positive RTO rows due to seeded randomness, constraining Day 5 threshold search.
 
 ### Recommended implementation order
-1. Read `docs/pdf_extract.txt` to confirm exact feature names before writing any code.
+1. Read `docs/track02_spec_reference.md` to confirm exact feature names before writing any code.
 2. Write generator, verify feature names, then generate CSVs.
 3. Write integrity tests.
 4. Run in container.
@@ -71,7 +71,7 @@
 
 ### Pre-implementation issue caught
 Before writing the first line of generation code, the draft feature names were
-cross-referenced against `docs/pdf_extract.txt` (the pre-extracted PDF source).
+cross-referenced against `docs/track02_spec_reference.md` (the pre-extracted PDF source).
 **7 mismatches found and corrected before any CSV was produced:**
 
 | Previous draft (wrong) | Corrected (PDF-exact) |
@@ -102,7 +102,7 @@ cross-referenced against `docs/pdf_extract.txt` (the pre-extracted PDF source).
 - 7 test classes, 23 test functions covering all acceptance criteria.
 
 **`instructions .md` §1a** — updated
-- PDF rule now references `docs/pdf_extract.txt` (ideation/ folder removed, PDF deleted).
+- PDF rule now references `docs/track02_spec_reference.md` (ideation/ folder removed, PDF deleted).
 
 ### Files created
 - `scripts/generate_data.py`
@@ -112,10 +112,10 @@ cross-referenced against `docs/pdf_extract.txt` (the pre-extracted PDF source).
 - `data/generation_report.md`
 - `config/historical_rates.json`
 - `tests/test_data_integrity.py`
-- `docs/pdf_extract.txt` (moved from removed ideation/ folder)
+- `docs/track02_spec_reference.md` (moved from removed ideation/ folder)
 
 ### Files modified
-- `instructions .md` — section 1a updated (PDF → pdf_extract.txt)
+- `instructions .md` — section 1a updated (PDF → track02_spec_reference.md)
 
 ### Files deleted
 - `ideation/Ten Day Implementation Plan Roadmap.pdf` (folder removed)
@@ -202,7 +202,7 @@ All non-COD orders have is_rto=0 (confirmed by audit independent check).
 
 - **Problem:** 7 feature name mismatches between first draft and PDF spec.
   - Root cause: Draft written from memory before cross-checking PDF.
-  - Fix: Rewrote generator after consulting `docs/pdf_extract.txt` feature table. No incorrect CSV was ever produced.
+  - Fix: Rewrote generator after consulting `docs/track02_spec_reference.md` feature table. No incorrect CSV was ever produced.
   - Remaining risk: None — all 15 names confirmed correct by acceptance tests.
 
 - **Problem:** `UnicodeEncodeError` on Windows cp1252 terminal when printing emoji (`⚠️`, `✅`, `≈`).
@@ -218,7 +218,7 @@ All non-COD orders have is_rto=0 (confirmed by audit independent check).
   - Reason: Synthetic data contains no PII; judge reproducibility benefits from tracked artifacts.
   - Alternatives rejected: Option B (keep ignored, force regeneration) — riskier for evaluation submission since seed behavior could diverge across Python versions.
 
-- **Decision:** Remove `ideation/` folder and replace PDF reference with pre-extracted `docs/pdf_extract.txt`.
+- **Decision:** Remove `ideation/` folder and replace PDF reference with pre-extracted `docs/track02_spec_reference.md`.
   - Reason: PDF binary not indexable by agents; text extract is equivalent and faster.
   - Alternatives rejected: Keep PDF — rejected because agents cannot read binary PDFs natively.
 
@@ -258,7 +258,7 @@ Findings from `audit/day-02.md` addressed after initial commit:
 
 | Finding | Severity | Fix Applied |
 |---|---|---|
-| A-D2-001 Stale ideation/ path in generate_data.py docstring | Medium | Updated docstring to reference `docs/pdf_extract.txt` |
+| A-D2-001 Stale ideation/ path in generate_data.py docstring | Medium | Updated docstring to reference `docs/track02_spec_reference.md` |
 | A-D2-002 Worklog does not use mandatory template | Medium | This file rewritten using §11 template |
 | A-D2-003 val positive class low (110 rows) | High downstream | Carried to Day 5 as hard gate — no code action |
 | A-D2-004 Leakage test too weak | Medium | Added `tests/test_data_reproducibility.py::TestNoLeakageDuringRateConstruction` with poisoned `read_csv` guard |

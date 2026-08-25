@@ -2,7 +2,7 @@
 
 Date/session: 2026-08-24
 Auditor: Codex GPT-5
-Scope: Day 02 implementation only, reviewed against `instructions .md`, `Implementation_plan.md`, `docs/worklogs/day-01.md`, `docs/worklogs/day-02.md`, and the feature-table passages in `docs/pdf_extract.txt`.
+Scope: Day 02 implementation only, reviewed against `instructions .md`, `Implementation_plan.md`, `docs/worklogs/day-01.md`, `docs/worklogs/day-02.md`, and the feature-table passages in `docs/track02_spec_reference.md`.
 
 ## Audit Verdict
 
@@ -23,7 +23,7 @@ The main risks are auditability and future evaluation validity:
 | Read governing instructions | PASS | `instructions .md` read. |
 | Read implementation plan | PASS | `Implementation_plan.md` read. |
 | Read relevant work logs | PASS | `docs/worklogs/day-01.md`, `docs/worklogs/day-02.md` read. |
-| Consult source feature table only when required | PASS | Day 2 plan explicitly references the feature table; reviewed `docs/pdf_extract.txt` feature-table lines around delivery history, order anomaly, identity/velocity, address quality, payment context, and drift indicators. |
+| Consult source feature table only when required | PASS | Day 2 plan explicitly references the feature table; reviewed `docs/track02_spec_reference.md` feature-table lines around delivery history, order anomaly, identity/velocity, address quality, payment context, and drift indicators. |
 | Inspect repository state | PASS | Source, tests, generated artifacts, Git state inspected. |
 | Validate current phase | PASS WITH WARNING | `python -m pytest tests/test_data_integrity.py -v -s` passed 23/23 with one pytest config warning and the expected low-positive-count warning. |
 
@@ -106,7 +106,7 @@ Evidence:
 - `scripts/generate_data.py:7` references `ideation/Ten Day Implementation Plan Roadmap.pdf`.
 - `scripts/generate_data.py:425` emits that stale path into `data/generation_report.md`.
 - `data/generation_report.md:3` contains `_Source authority: ideation/Ten Day Implementation Plan Roadmap.pdf_`.
-- `instructions .md` now says the original PDF and `ideation/` folder no longer exist and `docs/pdf_extract.txt` is the sole raw-spec reference.
+- `instructions .md` now says the original PDF and `ideation/` folder no longer exist and `docs/track02_spec_reference.md` is the sole raw-spec reference.
 
 Risk:
 
@@ -114,7 +114,7 @@ This weakens auditability. A later agent may look for a non-existent source path
 
 Recommendation:
 
-Update the generator docstring and report template to cite `docs/pdf_extract.txt` for feature-table verification, while preserving `Implementation_plan.md` as the day-to-day source of truth.
+Update the generator docstring and report template to cite `docs/track02_spec_reference.md` for feature-table verification, while preserving `Implementation_plan.md` as the day-to-day source of truth.
 
 ### A-D2-002 — Day 02 Worklog Does Not Use Mandatory Template
 
@@ -228,7 +228,7 @@ Conditions attached:
 **Status: CLOSED (All conditions met)**
 
 1. **A-D2-003**: Carried to Day 5 as a hard stability gate (logged).
-2. **A-D2-001**: Fixed docstring in `scripts/generate_data.py` to point to `docs/pdf_extract.txt`.
+2. **A-D2-001**: Fixed docstring in `scripts/generate_data.py` to point to `docs/track02_spec_reference.md`.
 3. **A-D2-002**: Normalized `docs/worklogs/day-02.md` to the mandatory template format.
 4. **A-D2-004 & A-D2-006**: Added `tests/test_data_reproducibility.py` which guards against val/heldout leakage during generation and verifies deterministic SHA-256 hashes against authoritative container output.
 5. **A-D2-005**: Fixed `.gitignore` to explicitly track data artifacts and audit reports.

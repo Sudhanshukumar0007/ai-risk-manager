@@ -5,7 +5,7 @@ Generates three isolated, seeded CSV splits with exactly 15 features across
 five signal families, using the EXACT feature names from the source PDF:
 
   ideation/Ten Day Implementation Plan Roadmap.pdf
-  (pre-extracted to: docs/pdf_extract.txt — ideation/ folder no longer exists)
+  (pre-extracted to: docs/track02_spec_reference.md — ideation/ folder no longer exists)
 
 Signal families and feature names (PDF authoritative):
   1. Delivery History    — pincode_historical_rto_rate, customer_past_rto_count,

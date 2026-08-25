@@ -1,14 +1,14 @@
 # Issue #8 Resolution: Missing Threshold Values & Fallback Gates
 
 ## Context
-During the Day 1 review of the extracted project specifications (`docs/pdf_extract.txt`), it was noted that the exact KS-test target score and the precise Brier score threshold were inexplicably missing from the document, likely lost during the PDF-to-text extraction process. This was formally logged as **Issue #8**.
+During the Day 1 review of the extracted project specifications (`docs/track02_spec_reference.md`), it was noted that the exact KS-test target score and the precise Brier score threshold were inexplicably missing from the document, likely lost during the PDF-to-text extraction process. This was formally logged as **Issue #8**.
 
 ## Risk Assessment
 Blindly inventing statistical thresholds in a risk-engine context is dangerous. An arbitrarily selected Brier score target might be mathematically impossible given the base rate, or a random KS-test threshold might enforce false confidence.
 
 ## Issue Context
 
-The original architecture plan required exact numeric thresholds for the Kolmogrov-Smirnov (KS) statistic, the Brier score, and the Expected Calibration Error (ECE). However, upon checking the `docs/pdf_extract.txt` (which contains the parsed contents of the authoritative `ideation/Ten Day Implementation Plan Roadmap.pdf`), the scalar values for the KS statistic and Brier score were found to be completely blank/missing. As we are strictly prohibited from inventing arbitrary thresholds, we have abandoned the missing KS/Brier scalars.
+The original architecture plan required exact numeric thresholds for the Kolmogrov-Smirnov (KS) statistic, the Brier score, and the Expected Calibration Error (ECE). However, upon checking the `docs/track02_spec_reference.md` (which contains the parsed contents of the authoritative `ideation/Ten Day Implementation Plan Roadmap.pdf`), the scalar values for the KS statistic and Brier score were found to be completely blank/missing. As we are strictly prohibited from inventing arbitrary thresholds, we have abandoned the missing KS/Brier scalars.
 
 **Note:** The threshold for ECE was clearly extracted as `< 0.08`. This is NOT missing and will be strictly enforced.
 

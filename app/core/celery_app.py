@@ -15,7 +15,7 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
-        "app.services.llm_explain",  # Day 8 — async LLM task
+        # "app.services.llm_explain",  # Day 8 — async LLM task
     ],
 )
 

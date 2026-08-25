@@ -2,7 +2,7 @@
 
 ## Priority Fixes
 
-1. Replace stale `ideation/Ten Day Implementation Plan Roadmap.pdf` references in `scripts/generate_data.py` and generated `data/generation_report.md` with `docs/pdf_extract.txt`.
+1. Replace stale `ideation/Ten Day Implementation Plan Roadmap.pdf` references in `scripts/generate_data.py` and generated `data/generation_report.md` with `docs/track02_spec_reference.md`.
 
 2. Rewrite `docs/worklogs/day-02.md` into the mandatory template from `instructions .md`. Keep the existing facts, but add the missing sections: repository state before work, pre-implementation assessment, plan compliance review, problems encountered, decisions, next required action, blocking issues, and do-not-repeat.
 

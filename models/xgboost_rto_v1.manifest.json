@@ -1,0 +1,12 @@
+{
+  "train_hash": "a1090e9831f9e0341ff6509f4e2c1bfb",
+  "val_hash": "0079aa680802839a446190c583c838de",
+  "fit_hash": "04b0cf30e5d93bd69340bd331c5c7860",
+  "calib_hash": "fbd66f77fc8e95a0810339726ab5db14",
+  "random_seed": 42,
+  "best_params": {
+    "learning_rate": 0.1,
+    "max_depth": 4,
+    "n_estimators": 100
+  }
+}

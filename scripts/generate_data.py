@@ -132,6 +132,7 @@ def _family4_address_quality(rng, n, pincodes):
     """
     address_char_length          — raw character length of address string
     address_tfidf_ambiguity_score — cosine similarity to bad-address matrix [0,1]
+                                  (NOTE: Generated synthetically offline. True TF-IDF parity is not in scope for the simulation.)
     hub_distance_km              — geodesic distance to nearest fulfillment hub
     """
     address_char_length = rng.normal(loc=45, scale=15, size=n).astype(int)
@@ -393,6 +394,15 @@ def main():
     with open("config/historical_rates.json", "w") as f:
         json.dump(rates, f, indent=2)
     print("Saved: config/historical_rates.json")
+
+    with open("config/feature_constants.json", "w") as f:
+        json.dump({
+            "CATEGORY_MEDIAN_CART": CATEGORY_MEDIAN_CART,
+            "CATEGORY_P95_BASKET": CATEGORY_P95_BASKET,
+            "HUB_DISTANCES_BASE": HUB_DISTANCES_BASE,
+            "NOVEL_PINCODES": NOVEL_PINCODES,
+        }, f, indent=2)
+    print("Saved: config/feature_constants.json")
 
     # Step 7: Composition stats + Issue #12 check
     def split_stats(df, name):

@@ -418,6 +418,8 @@ The static explanation fallback belongs to the asynchronous task.
 
 Every phase must have executable validation.
 
+**IMPORTANT NOTE:** The environment is inside Docker. All Python scripts and tests MUST be executed via Docker using `docker compose exec api <command>` (if running) or `docker compose run --rm api <command>`. Do not run Python scripts directly on the host machine.
+
 Prefer:
 
 - `pytest`

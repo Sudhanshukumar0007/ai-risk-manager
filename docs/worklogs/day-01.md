@@ -82,6 +82,7 @@
 
 ### Configuration/service changes
 - ADR-001: RabbitMQ chosen as Celery broker (not Redis-only) — matches architecture narrative
+- Git repository initialized locally, initial commit created, and pushed to remote origin `https://github.com/Sudhanshukumar0007/ai-risk-manager.git` on branch `main`
 
 ---
 

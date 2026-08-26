@@ -1,11 +1,9 @@
 """AI Risk Manager — FastAPI application entry point.
 
-Day 1 implements:
-  GET /health  — per-dependency liveness check (DB, Redis, RabbitMQ broker)
-
-Subsequent days add:
-  POST /v1/orders/score
-  POST /v1/webhooks/razorpay
+Day 1: GET /health — per-dependency liveness check
+Day 6: POST /v1/orders/score — idempotent ingestion + Celery dispatch
+       GET  /v1/orders/{event_id}/result — poll scoring result
+Day 7: POST /v1/webhooks/razorpay — signature-verified webhook handler
 """
 
 import asyncio
@@ -19,15 +17,38 @@ from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.db.session import create_all_tables
 
 logger = logging.getLogger(__name__)
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown lifecycle."""
+    """Startup / shutdown lifecycle.
+
+    Day 6 additions:
+    - Create DB tables + append-only trigger on audit_log.
+    - Initialise shared async Redis client on app.state so route
+      dependencies can use it without a module-level global.
+    """
     logger.info("Starting AI Risk Manager API (env=%s)", settings.app_env)
+
+    # ── DB: create tables + install append-only trigger ───────────────────
+    await create_all_tables()
+
+    # ── Redis: shared connection pool on app.state ─────────────────────────
+    redis_client = aioredis.from_url(
+        settings.redis_url,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    app.state.redis = redis_client
+    logger.info("Redis connection pool initialised")
+
     yield
+
+    # ── Shutdown ──────────────────────────────────────────────────────────
+    await redis_client.aclose()
     logger.info("Shutting down AI Risk Manager API")
 
 
@@ -38,6 +59,13 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# ── Routers ───────────────────────────────────────────────────────────────────
+from app.api.routes import router as scoring_router  # noqa: E402  (post-app creation)
+from app.api.webhooks import router as webhook_router
+
+app.include_router(scoring_router)
+app.include_router(webhook_router)
 
 
 # ── Dependency health helpers ─────────────────────────────────────────────────

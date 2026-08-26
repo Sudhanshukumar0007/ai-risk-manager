@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # ── Razorpay ─────────────────────────────────────────────────────────────
     razorpay_key_id: str = "rzp_test_CHANGEME"
     razorpay_key_secret: str = "CHANGEME"
+    razorpay_webhook_secret: str = "whsec_CHANGEME"
 
     # ── Anthropic / Claude ────────────────────────────────────────────────────
     anthropic_api_key: str = "sk-ant-CHANGEME"

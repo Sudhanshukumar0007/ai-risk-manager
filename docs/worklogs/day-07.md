@@ -2,36 +2,132 @@
 
 ## Status
 
-- Phase status: `IN PROGRESS` / `BUG FIXING`
+- Phase status: `COMPLETE`
+- Checkpoint impact: `Checkpoint 2`
 - Date/session: 2026-08-26
 - Agent/session identifier: Antigravity
 
-## 1. Issues Addressed
+## 1. Plan Tasks
 
-The test suite for Razorpay integration (`tests/test_razorpay_integration.py`) had several stability and logic issues that surfaced when running the full suite:
+| Plan Step | Requirement | Status |
+|---|---|---|
+| 1 | Test suite isolation and database hygiene | DONE |
+| 2 | Razorpay timeout edge case handling (state machine) | DONE |
 
-1. **Event Loop Cascade (`RuntimeError: Event loop is closed`)**
-   - **Cause:** `app` fixture is `module`-scoped, but `async_session` was `function`-scoped under `pytest-asyncio`'s AUTO mode. This caused `asyncpg` connections to bind to the first test's event loop, crashing subsequent tests when they tried to tear down.
-   - **Fix:** Added a `session`-scoped `event_loop` fixture in `conftest.py` to ensure all tests share the same event loop.
+## 2. Repository State Before Work
 
-2. **Transactional Isolation Conflict (`Can't operate on closed transaction`)**
-   - **Cause:** Tests used a `session.begin()` wrapper for rollback isolation. However, application code (`reconcile_or_create`) legitimately commits twice (for `CREATING` and `PENDING_PREPAY`). The app's `commit()` closed the outer transaction, crashing the test on subsequent queries.
-   - **Fix:** Switched to a plain `async_session` fixture (using SQLAlchemy 2.0 `autobegin`). Teardown now opens a *fresh* DB session to `DELETE FROM payment_link_state`, preventing interference with the test's closed/committed session.
+### Relevant files
+- `tests/test_razorpay_integration.py`
+- `tests/conftest.py`
+- `app/services/razorpay_client.py`
 
-3. **Stale Data / Unique Constraint Collisions**
-   - **Cause:** Hardcoded `order_id`s (`order_123`, `order_dup`, etc.) collided across test runs if teardown failed previously.
-   - **Fix:** Replaced all hardcoded `order_id` and `reference_id` values in `test_razorpay_integration.py` with `uuid`-suffixed unique strings (e.g., `f"order-valid-{uuid.uuid4()}"`). Tests are now inherently self-contained.
+### Existing implementation
+- Razorpay client (`reconcile_or_create`) and Webhook handlers existed but left state stranded on timeout.
+- Test suite isolation used an outer `session.begin()` + SAVEPOINT pattern that conflicted with application logic calling `session.commit()`.
 
-4. **State Machine Gap (Timeout leaves row stuck in `CREATING`)**
-   - **Cause:** If `create_payment_link()` timed out on the first attempt, the exception propagated immediately, leaving the DB row in `CREATING`. The retry logic treats `CREATING` as "concurrent creation in flight" and continuously raises `Retry`, blocking reconciliation.
-   - **Fix:** Wrapped `create_payment_link()` in `razorpay_client.py` with a `try/except` block that updates the state to `LINK_CREATION_FAILED` before re-raising. The retry path now correctly branches to check `payment_link.all` for existing links.
+### Existing tests
+- `test_razorpay_integration.py` had 5 failing tests due to event loop scoping, transactional rollback collisions, and stale hardcoded `order_id`s.
 
-## 2. Validation
+### Known failures
+- `Event loop is closed` cascade in tests.
+- `Can't operate on closed transaction` in DB queries.
+- Assertion failures on `CREATING` vs `LINK_CREATION_FAILED`.
 
-- All 5 failing tests in `tests/test_razorpay_integration.py` now pass.
-- Total test suite status: **75/75 passed** with 0 failures.
+## 3. Pre-Implementation Assessment
 
-## 3. Repository State
+### What was already correct
+- Application webhook logic, signature verification, and Razorpay SDK mocking.
 
-- Fixes committed in `80fb269` ("fix: event loop scope, test isolation, and LINK_CREATION_FAILED state transition").
-- Remaining Day 6 untracked files committed in `09415b6` ("feat: Day 6...").
+### What was missing
+- Real transactional boundaries for tests matching application behavior.
+- Resilient retry handling for Razorpay SDK timeouts.
+
+### Risks identified
+- Outer-transaction test wrappers break when the actual application correctly issues double commits (e.g., initial state + result state).
+- Hardcoded IDs cause cascading failures if tests abort mid-run.
+
+### Recommended implementation order
+- Fix `conftest.py` event loops and DB isolation.
+- Un-hardcode IDs in failing tests.
+- Fix state transition gap in `razorpay_client.py` to correctly map timeouts.
+
+## 4. Implementation Performed
+
+### Changes
+- Replaced test `session.begin()` wrapper with a plain session and fresh-session `DELETE` teardown.
+- Pinned pytest event loop to `session` scope to fix `pytest-asyncio` scoping issues.
+- Replaced hardcoded IDs with UUID-suffixed values in 5 tests.
+- Updated `create_payment_link()` in `razorpay_client.py` to write `LINK_CREATION_FAILED` on timeout, allowing retry logic to cleanly distinguish an aborted first attempt from a concurrent in-flight attempt.
+
+### Files created
+- None
+
+### Files modified
+- `tests/conftest.py`
+- `tests/test_razorpay_integration.py`
+- `app/services/razorpay_client.py`
+
+### Files deleted
+- None
+
+### Configuration/service changes
+- None
+
+## 5. Validation
+
+### Commands run
+```text
+docker compose exec api pytest tests/ -v --tb=short
+```
+
+### Test results
+- 75 passed, 0 failures. The 5 previously failing Razorpay tests now pass reliably.
+
+### Metrics/results
+- Test concurrency is stable, data is reliably truncated, and timeouts branch correctly to the reconciliation path.
+
+## 6. Plan Compliance Review
+
+### Fully aligned
+- Isolation matches real application commits.
+- Razorpay retry edge cases strictly handled via state transitions, not blind retries.
+
+### Deviations
+- N/A
+
+### Why deviations were necessary
+- N/A
+
+### Impact on later phases
+- Reliable testing for Day 8 and Day 9 tasks.
+
+## 7. Problems Encountered
+
+- Problem: The test isolation fixture wrapped the test in `session.begin()`, breaking when `reconcile_or_create` called `session.commit()`.
+- Root cause: Test wrappers shouldn't span DB commits for full-flow testing.
+- Fix: Use a standard session and run teardown in a separate, fresh DB session.
+- Remaining risk: None.
+
+## 8. Decisions
+
+- Decision: Changed all tests to use UUID-suffixed `order_id`s.
+- Reason: Avoids data collision across suites even if teardown fails (e.g., via Ctrl+C).
+- Alternatives rejected: Truncate tables before every test. (Instead, relying on UUIDs is safer for concurrently running integration tests).
+
+## 9. Suggestions for Next Session
+
+- Move to Day 8 implementation: integrating the LLM explanation task as a non-blocking asynchronous Celery task.
+
+## 10. Next Required Action
+
+The next agent should:
+1. Verify the completion of Day 7 and review the Day 8 plan.
+2. Implement the asynchronous LLM task without blocking the HTTP path.
+3. Update relevant integration tests.
+
+## 11. Completion Gate
+
+- Acceptance test: PASS
+- Deliverables present: YES
+- Blocking issues: NONE
+- Phase complete: YES

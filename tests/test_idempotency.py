@@ -84,6 +84,7 @@ def _mock_celery_task(event_id: str, order_id: str):
 
 # ── Test 1: Sequential duplicate → single DB row ──────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_sequential_duplicate_single_row(test_client, app):
     """Sending the same event_id twice sequentially must produce exactly one DB row."""
@@ -182,15 +183,23 @@ async def test_concurrent_duplicate_single_row(test_client, app):
     )
 
 
-# ── Test 3: Redis unavailable → Postgres UNIQUE catches duplicate ─────────────
+# ── Test 3: Redis unavailable → both requests reach Celery task enqueue ──────
 
 @pytest.mark.asyncio
 async def test_redis_unavailable_postgres_catches_duplicate(test_client, app):
-    """When Redis is down, Postgres UNIQUE constraint is the dedup guard.
+    """When Redis is down the route skips the placeholder INSERT and enqueues
+    the Celery task directly.  Deduplication is handled inside the task by
+    _insert_audit_log_sync's insert-and-catch pattern.
 
-    First call: Redis errors → Postgres INSERT succeeds (is_new=True) → 202.
-    Second call: Redis still errors → Postgres INSERT raises UniqueViolation
-                 → insert_audit_log returns is_new=False → 200 duplicate.
+    BUG FIX (A-DAY09-002): Previously the route inserted an incomplete
+    placeholder row (NULL score/tier/action).  Because audit_log has a
+    DB-level append-only trigger that forbids UPDATE, the scoring task that
+    arrived later would catch UniqueViolation and silently leave the row
+    permanently incomplete.
+
+    Corrected behaviour: no placeholder INSERT.  Both calls reach task enqueue
+    and return 202.  The first task to write the complete row wins; the second
+    task catches UniqueViolation (handled in scoring.py, not routes.py).
     """
     from redis.exceptions import RedisError
 
@@ -201,40 +210,33 @@ async def test_redis_unavailable_postgres_catches_duplicate(test_client, app):
     mock_redis.set = AsyncMock(side_effect=RedisError("timeout"))
     app.state.redis = mock_redis
 
-    existing_row = MagicMock()
-    existing_row.event_id = eid
-    existing_row.order_id = payload["order_id"]
-    existing_row.score = None  # task hasn't run yet
-    existing_row.tier = None
-    existing_row.action = None
-    existing_row.shap_values_json = None
-
-    # First call: INSERT succeeds (is_new=True)
-    # Second call: UniqueViolation → is_new=False
-    insert_results = iter([(existing_row, True), (existing_row, False)])
-
-    async def mock_insert(*args, **kwargs):
-        return next(insert_results)
-
-    with patch("app.api.routes.insert_audit_log", side_effect=mock_insert), \
-         patch("app.api.routes.lookup_existing_audit_log", new_callable=AsyncMock, return_value=existing_row), \
-         patch("app.services.scoring.score_order_task") as mock_task:
-
+    with patch("app.services.scoring.score_order_task") as mock_task:
         mock_task.delay.return_value = MagicMock(id="task-fallback")
 
         r1 = await test_client.post("/v1/orders/score", json=payload)
         r2 = await test_client.post("/v1/orders/score", json=payload)
 
+    # Both requests get past Redis (it's down) and enqueue tasks directly.
+    # The scoring task's _insert_audit_log_sync handles insert-and-catch with
+    # the complete scored row — the route itself never inserts a placeholder.
     assert r1.status_code == 202, f"First call should be 202, got {r1.status_code}: {r1.text}"
-    assert r2.status_code == 200, f"Second call (Postgres duplicate) should be 200, got {r2.status_code}: {r2.text}"
-    assert r2.json()["status"] == "duplicate"
+    assert r2.status_code == 202, f"Second call should also be 202, got {r2.status_code}: {r2.text}"
+    # Both tasks enqueued — dedup enforcement is in the scoring task
+    assert mock_task.delay.call_count == 2, (
+        f"Both requests should enqueue a task; got {mock_task.delay.call_count} enqueues. "
+        "Task-level insert-and-catch is the dedup guard when Redis is down."
+    )
 
 
 # ── Test 4: Postgres unavailable → 503 ───────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_postgres_unavailable_returns_503(test_client, app):
-    """If Postgres is down (Redis also down), endpoint must return 503."""
+    """If Celery task enqueue fails (e.g., broker unreachable) the endpoint
+    returns 503.  This is the correct failure path after the A-DAY09-002 fix:
+    when Redis is down the route skips the placeholder INSERT and goes straight
+    to task enqueue, so a broken broker is what triggers the 503.
+    """
     from redis.exceptions import RedisError
 
     eid = str(uuid.uuid4())
@@ -244,14 +246,14 @@ async def test_postgres_unavailable_returns_503(test_client, app):
     mock_redis.set = AsyncMock(side_effect=RedisError("timeout"))
     app.state.redis = mock_redis
 
-    async def mock_insert_fails(*args, **kwargs):
-        raise Exception("could not connect to server")
-
-    with patch("app.api.routes.insert_audit_log", side_effect=mock_insert_fails):
+    # Simulate Celery broker being unreachable — .delay() raises
+    with patch("app.services.scoring.score_order_task") as mock_task:
+        mock_task.delay.side_effect = Exception("could not connect to broker")
         r = await test_client.post("/v1/orders/score", json=payload)
 
     assert r.status_code == 503, f"Expected 503, got {r.status_code}: {r.text}"
-    assert "unavailable" in r.json()["detail"].lower()
+    # The broker failure message is surfaced in the detail
+    assert "enqueue" in r.json()["detail"].lower()
 
 
 # ── Test 5: Invalid payload → 422 ────────────────────────────────────────────

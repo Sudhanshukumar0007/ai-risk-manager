@@ -55,6 +55,23 @@ async def _lookup_scoring_failure(session: AsyncSession, event_id: str):
     return obj
 
 
+async def _lookup_llm_explanation(session: AsyncSession, event_id: str):
+    """Fetch an LLMExplanation row by event_id, or None."""
+    from app.db.models import LLMExplanation
+
+    result = await session.execute(
+        _text("SELECT * FROM llm_explanations WHERE event_id = :eid LIMIT 1"),
+        {"eid": event_id},
+    )
+    row = result.mappings().first()
+    if row is None:
+        return None
+    obj = LLMExplanation()
+    for col in LLMExplanation.__table__.columns:
+        setattr(obj, col.name, row.get(col.name))
+    return obj
+
+
 
 # ── Request / response models ─────────────────────────────────────────────────
 
@@ -100,6 +117,8 @@ class ScoreDuplicateResponse(BaseModel):
     tier: Optional[str] = None
     action: Optional[str] = None
     shap_top3: Optional[list] = None
+    explanation: Optional[str] = None
+    explanation_status: str = "pending"
     message: str = "Duplicate event_id — returning existing result"
 
 
@@ -171,6 +190,7 @@ async def score_order(
 
         if existing is not None:
             # Task completed — return the scored result
+            explanation_obj = await _lookup_llm_explanation(db, event_id)
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
                 content=ScoreDuplicateResponse(
@@ -180,6 +200,8 @@ async def score_order(
                     tier=existing.tier,
                     action=existing.action,
                     shap_top3=existing.shap_values_json,
+                    explanation=explanation_obj.explanation_text if explanation_obj else None,
+                    explanation_status=explanation_obj.status if explanation_obj else "pending",
                 ).model_dump(),
             )
 
@@ -220,38 +242,22 @@ async def score_order(
         )
 
 
-    # ── Step 2: Redis-unavailable path — establish Postgres guard first ────────
-    if not redis_available:
-        try:
-            _, is_new = await insert_audit_log(
-                db,
-                event_id=event_id,
-                order_id=order_id,
-                # Scores/tier populated later by the Celery task
-            )
-        except Exception as exc:
-            logger.exception(
-                "Postgres unavailable — cannot establish dedup record for event_id=%s: %s",
-                event_id, exc,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database unavailable — cannot guarantee idempotency; request rejected",
-            )
-        if not is_new:
-            # Postgres caught the duplicate via UniqueViolation
-            existing = await lookup_existing_audit_log(db, event_id)
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content=ScoreDuplicateResponse(
-                    event_id=event_id,
-                    order_id=order_id,
-                    score=existing.score if existing else None,
-                    tier=existing.tier if existing else None,
-                    action=existing.action if existing else None,
-                    shap_top3=existing.shap_values_json if existing else None,
-                ).model_dump(),
-            )
+    # ── Step 2: Redis-unavailable path — enqueue task directly ───────────────
+    #
+    # BUG FIX (A-DAY09-002): Previously this path inserted an incomplete
+    # placeholder row (NULL score/tier/action) into audit_log so that a
+    # concurrent duplicate would hit a UniqueViolation.  However, audit_log has
+    # a DB-level append-only trigger that forbids UPDATE — so the Celery scorer
+    # that arrived later would hit UniqueViolation, detect "duplicate", silently
+    # skip its own insert, and leave the placeholder permanently incomplete.
+    #
+    # Correct fix: do NOT insert a placeholder.  Skip straight to task enqueue.
+    # The Celery task's own _insert_audit_log_sync inserts the *complete* row
+    # (score, tier, action all populated).  If two tasks race (two identical
+    # requests both got past Redis), the second one catches UniqueViolation and
+    # returns the already-complete row — this is correct and idempotent.
+    #
+    # If Postgres itself is unavailable the 503 path in Step 3 covers it.
 
     # ── Step 3: Enqueue Celery task ───────────────────────────────────────────
     try:
@@ -313,6 +319,7 @@ async def get_score_result(
         raise HTTPException(status_code=503, detail="Database unavailable")
 
     if row is not None:
+        explanation_obj = await _lookup_llm_explanation(db, event_id)
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -325,6 +332,8 @@ async def get_score_result(
                 "shap_top3": row.shap_values_json,
                 "task_id": row.task_id,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
+                "explanation": explanation_obj.explanation_text if explanation_obj else None,
+                "explanation_status": explanation_obj.status if explanation_obj else "pending",
             },
         )
 

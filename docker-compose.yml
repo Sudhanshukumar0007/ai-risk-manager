@@ -23,6 +23,7 @@ services:
       POSTGRES_DB: risk_db
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -127,5 +128,38 @@ services:
       test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
       interval: 30s
       timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ── 6. Streamlit Dashboard (Day 9) ──────────────────────────────────────────
+  # Starts independently; does not need to be healthy for other services.
+  # Access at http://localhost:8501
+  # Reads DATABASE_URL_SYNC directly — no async driver required.
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: risk_dashboard
+    restart: unless-stopped
+    networks: [risk_net]
+    env_file: .env
+    environment:
+      # Use synchronous psycopg2 URL for Streamlit (strips +asyncpg prefix automatically)
+      DATABASE_URL_SYNC: "postgresql://risk_user:risk_pass@postgres:5432/risk_db"
+      DASHBOARD_CACHE_TTL: "10"
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    volumes:
+      - .:/workspace
+      - /workspace/.venv
+    working_dir: /workspace
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/_stcore/health || exit 1"]
+      interval: 20s
+      timeout: 10s
       retries: 3
       start_period: 30s

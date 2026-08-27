@@ -185,3 +185,31 @@ class ScoringFailure(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class LLMExplanation(Base):
+    """Stores LLM explanations asynchronously generated for scored orders.
+
+    Using a separate table preserves the append-only constraint on audit_log
+    while allowing the explanation to arrive and be stored after the original
+    HTTP response has returned.
+    """
+
+    __tablename__ = "llm_explanations"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    order_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+
+    # Generated text or the static fallback message
+    explanation_text: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # "complete" (Claude API returned) or "fallback" (timeout/crash)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

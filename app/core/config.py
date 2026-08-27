@@ -32,8 +32,10 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = "CHANGEME"
     razorpay_webhook_secret: str = "whsec_CHANGEME"
 
-    # ── Anthropic / Claude ────────────────────────────────────────────────────
-    anthropic_api_key: str = "sk-ant-CHANGEME"
+    # ── LLM (OpenRouter) ──────────────────────────────────────────────────────
+    openrouter_api_key: str = "CHANGEME"
+    openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"
+    llm_timeout_seconds: float = 2.5
 
 
 settings = Settings()

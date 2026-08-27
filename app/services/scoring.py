@@ -300,6 +300,10 @@ def score_order_task(self: Task, payload: dict[str, Any]) -> dict[str, Any]:
             elif tier == "SOFT_GATE_COD":
                 from app.services.soft_gate import apply_soft_gate
                 apply_soft_gate(order_id)
+                
+            # 7. Dispatch LLM Explanation
+            from app.services.llm_explain import explain_order_task
+            explain_order_task.delay(event_id, order_id, shap_top3, score_val, tier)
 
         result = {
             "event_id": event_id,

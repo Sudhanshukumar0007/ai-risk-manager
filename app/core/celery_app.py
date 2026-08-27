@@ -15,8 +15,9 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
-        "app.services.scoring",   # Day 6 — score_order_task
-        # "app.services.llm_explain",  # Day 8 — async LLM task
+        "app.services.scoring",        # Day 6 — score_order_task
+        "app.services.payment_tasks",  # Day 7 — create_payment_link_task
+        "app.services.llm_explain",    # Day 8 — explain_order_task
     ],
 )
 

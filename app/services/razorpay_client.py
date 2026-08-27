@@ -143,7 +143,7 @@ async def reconcile_or_create(session: AsyncSession, order_id: str, cart_value: 
         # Raise Retry exception directly. It will be caught by the celery task or propagate if not bound.
         raise Retry(message="Concurrent creation in flight", exc=None)
         
-    if state in ("CREATING", "LINK_CREATION_FAILED"):
+    if state in ("CREATING", "LINK_CREATION_FAILED", "PENDING_CREATE"):
         # If is_new=True, state is CREATING. We proceed.
         # If state is LINK_CREATION_FAILED, it's a retry of a failed creation.
         # We don't hold a lock during the HTTP call.

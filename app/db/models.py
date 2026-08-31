@@ -213,3 +213,19 @@ class LLMExplanation(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class WebhookEvent(Base):
+    """Idempotency table for Razorpay webhooks."""
+
+    __tablename__ = "webhook_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+

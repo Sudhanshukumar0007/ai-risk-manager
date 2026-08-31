@@ -11,6 +11,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -76,40 +77,58 @@ async def handle_razorpay_webhook(
     except KeyError:
         raise HTTPException(status_code=422, detail="Missing reference_id in payload")
         
-    # Idempotency / Deduplication
-    redis_key = f"razorpay_webhook:{event_id}"
-    was_set = await redis.set(redis_key, "1", nx=True, ex=WEBHOOK_TTL)
-    if not was_set:
+
+
+    # ── 1. Idempotency / Deduplication via Redis fast-path ────────────────
+    if redis is not None:
+        try:
+            from app.core.idempotency import redis_set_nx
+            is_new_in_redis = await redis_set_nx(redis, f"wh_{event_id}")
+            if not is_new_in_redis:
+                logger.info("Webhook %s already processed (Redis cache hit). Ignoring.", event_id)
+                return {"status": "ok"}
+        except Exception as exc:
+            logger.warning("Redis unavailable during webhook dedup check: %s — falling through to Postgres", exc)
+
+    # ── 2. Idempotency / Deduplication via Database insert-and-catch ──────
+    # State-transition validation
+    try:
+        from app.db.models import WebhookEvent
+        # Insert event_id first, catch UniqueViolation if duplicate
+        webhook_event = WebhookEvent(event_id=event_id)
+        session.add(webhook_event)
+        await session.flush()
+        
+        result = await session.execute(
+            text("SELECT id, state FROM payment_link_state WHERE reference_id = :ref FOR UPDATE"),
+            {"ref": reference_id}
+        )
+        row = result.first()
+        
+        if not row:
+            logger.warning("Webhook received for unknown reference_id %s", reference_id)
+            await session.rollback()
+            raise HTTPException(status_code=404, detail="Reference ID not found")
+            
+        current_state = row[1]
+        
+        if current_state == "PAID":
+            # Genuine conflict or redundant update
+            logger.warning("Webhook conflict: state is already PAID for reference_id %s", reference_id)
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="State is already PAID")
+            
+        # Transition to PAID
+        await session.execute(
+            text("UPDATE payment_link_state SET state = 'PAID', updated_at = NOW() WHERE reference_id = :ref"),
+            {"ref": reference_id}
+        )
+        await session.commit()
+        
+        logger.info("Successfully processed payment_link.paid for reference_id %s", reference_id)
+        return {"status": "ok"}
+    except IntegrityError as e:
+        await session.rollback()
+        # Duplicate event_id caught
         logger.info("Webhook %s already processed (redelivery). Ignoring.", event_id)
         return {"status": "ok"}
-        
-    # State-transition validation
-    result = await session.execute(
-        text("SELECT id, state FROM payment_link_state WHERE reference_id = :ref FOR UPDATE"),
-        {"ref": reference_id}
-    )
-    row = result.first()
-    
-    if not row:
-        logger.warning("Webhook received for unknown reference_id %s", reference_id)
-        # Clear redis key so we can retry if needed? Actually Razorpay will retry.
-        # But we don't know this reference_id. Let's return 404.
-        raise HTTPException(status_code=404, detail="Reference ID not found")
-        
-    current_state = row[1]
-    
-    if current_state == "PAID":
-        # It's a new event_id but the state is already PAID. Genuine conflict.
-        logger.warning("Webhook conflict: state is already PAID for reference_id %s", reference_id)
-        raise HTTPException(status_code=409, detail="State is already PAID")
-        
-    # Transition to PAID from any non-PAID state (CREATING, PENDING_PREPAY, etc.)
-    # Razorpay is authoritative.
-    await session.execute(
-        text("UPDATE payment_link_state SET state = 'PAID' WHERE reference_id = :ref"),
-        {"ref": reference_id}
-    )
-    await session.commit()
-    
-    logger.info("Successfully processed payment_link.paid for reference_id %s", reference_id)
-    return {"status": "ok"}

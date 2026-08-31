@@ -138,6 +138,7 @@ async def get_redis(request: Request) -> Optional[Redis]:
     response_description="202 Accepted (new) or 200 OK (duplicate)",
 )
 async def score_order(
+    request: Request,
     payload: OrderPayload,
     db: AsyncSession = Depends(get_db),
     redis: Optional[Redis] = Depends(get_redis),
@@ -148,14 +149,33 @@ async def score_order(
     - Duplicate (Redis or Postgres): returns 200 with existing result.
     - Postgres unavailable: returns 503.
     """
+    if redis is not None:
+        client_ip = request.client.host if request.client else "unknown"
+        rl_key = f"rate_limit:score:{client_ip}"
+        try:
+            current = await redis.incr(rl_key)
+            if current == 1:
+                await redis.expire(rl_key, 60)
+            if current > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many requests",
+                )
+        except RedisError as exc:
+            logger.warning("Redis unavailable during rate limit check: %s", exc)
+
     event_id = payload.event_id
     order_id = payload.order_id
     raw_dict: dict[str, Any] = payload.model_dump()
+
+    import time
+    t_start = time.perf_counter()
 
     # ── Step 1: Redis SET NX fast path ────────────────────────────────────────
     redis_available = redis is not None
     is_redis_duplicate = False
 
+    t_redis_start = time.perf_counter()
     if redis_available:
         try:
             is_new_in_redis = await redis_set_nx(redis, event_id)
@@ -164,6 +184,7 @@ async def score_order(
         except RedisError as exc:
             logger.warning("Redis unavailable during dedup check: %s — falling through to Postgres", exc)
             redis_available = False  # treat as unavailable; Postgres is the guard
+    t_redis_end = time.perf_counter()
 
     if is_redis_duplicate:
         # Redis key exists — the event was previously submitted.
@@ -260,10 +281,12 @@ async def score_order(
     # If Postgres itself is unavailable the 503 path in Step 3 covers it.
 
     # ── Step 3: Enqueue Celery task ───────────────────────────────────────────
+    t_celery_start = time.perf_counter()
     try:
         from app.services.scoring import score_order_task  # late import avoids circular
 
-        task = score_order_task.delay(raw_dict)
+        import asyncio
+        task = await asyncio.to_thread(score_order_task.delay, raw_dict)
         task_id = task.id
         logger.info("Enqueued score_order_task id=%s for event_id=%s", task_id, event_id)
     except Exception as exc:
@@ -272,6 +295,14 @@ async def score_order(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not enqueue scoring task",
         )
+    t_celery_end = time.perf_counter()
+
+    t_end = time.perf_counter()
+    headers = {
+        "X-Trace-Redis-Ms": f"{(t_redis_end - t_redis_start) * 1000:.3f}",
+        "X-Trace-Celery-Ms": f"{(t_celery_end - t_celery_start) * 1000:.3f}",
+        "X-Trace-Total-Ms": f"{(t_end - t_start) * 1000:.3f}",
+    }
 
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
@@ -280,6 +311,7 @@ async def score_order(
             order_id=order_id,
             task_id=task_id,
         ).model_dump(),
+        headers=headers,
     )
 
 

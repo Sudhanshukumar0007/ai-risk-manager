@@ -164,6 +164,60 @@ async def test_duplicate_webhook_ignored(test_client, async_session, valid_webho
     )
     assert res.scalar() == "PAID"
 
+@pytest.mark.asyncio
+async def test_concurrent_webhook_ignored(test_client, async_session, valid_webhook_payload):
+    """Multiple identical webhooks sent truly concurrently process only once."""
+    import json
+    import uuid
+    import asyncio
+
+    order_id = f"order-conc-{uuid.uuid4()}"
+    ref_id = f"ref-conc-{uuid.uuid4()}"
+    event_id = str(uuid.uuid4())
+
+    state_row = PaymentLinkState(
+        order_id=order_id,
+        reference_id=ref_id,
+        state="PENDING_PREPAY"
+    )
+    async_session.add(state_row)
+    await async_session.commit()
+
+    valid_webhook_payload["event_id"] = event_id
+    valid_webhook_payload["payload"]["payment_link"]["entity"]["reference_id"] = ref_id
+    payload_bytes = json.dumps(valid_webhook_payload).encode()
+    sig = generate_signature(payload_bytes, settings.razorpay_webhook_secret)
+    headers = {"x-razorpay-signature": sig}
+
+    # Fire 5 concurrent requests
+    async def make_req():
+        # Each gets its own async client to ensure true concurrency without connection pooling bottlenecks in httpx
+        from httpx import AsyncClient
+        async with AsyncClient(app=test_client._transport.app, base_url="http://test") as c:
+            return await c.post("/v1/webhooks/razorpay", content=payload_bytes, headers=headers)
+
+    results = await asyncio.gather(*(make_req() for _ in range(5)))
+    
+    # All should return 200 (idempotent), but only one should do the actual update
+    for resp in results:
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    from sqlalchemy import text
+    res = await async_session.execute(
+        text("SELECT state FROM payment_link_state WHERE order_id = :oid"),
+        {"oid": order_id},
+    )
+    assert res.scalar() == "PAID"
+    
+    # Verify exactly one WebhookEvent row was created
+    res2 = await async_session.execute(
+        text("SELECT count(*) FROM webhook_events WHERE event_id = :eid"),
+        {"eid": event_id},
+    )
+    assert res2.scalar() == 1
+
+
 
 @pytest.mark.asyncio
 async def test_conflicting_webhook_returns_409(test_client, async_session, valid_webhook_payload):

@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI):
       dependencies can use it without a module-level global.
     """
     logger.info("Starting AI Risk Manager API (env=%s)", settings.app_env)
+    
+    # Increase thread pool size to prevent exhaustion from Celery dispatch
+    loop = asyncio.get_running_loop()
+    import concurrent.futures
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=200))
 
     # ── DB: create tables + install append-only trigger ───────────────────
     await create_all_tables()

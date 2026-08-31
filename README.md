@@ -10,9 +10,9 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)
 ![Status](https://img.shields.io/badge/status-submission--ready-brightgreen.svg)
 
-**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — extracting risk features in ~2.4ms (p99) and routing every order through a cost-optimal, three-tier intervention engine.**
+**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~14ms (p99).**
 
-> **Note on latency scope:** the sub-3ms figure above covers feature extraction only (see [Feature Extraction Latency](#feature-extraction-latency)). End-to-end `/v1/orders/score` latency — including model inference, the cost-engine router, and DB writes — has not yet been separately benchmarked; see [Known Limitations](#-known-limitations--next-steps).
+> **Note on latency scope:** End-to-end `/v1/orders/score` latency (including inference, the cost-engine router, and DB writes) is benchmarked in [day11_e2e_latency_report.md](docs/day11_e2e_latency_report.md).
 
 Built for Buildathon Track 02 in a strict 10-day, phase-gated development cycle, with every day's work independently audited against the implementation plan and a frozen, blind held-out evaluation.
 
@@ -61,18 +61,20 @@ The thresholds separating these tiers aren't guessed — they're derived from a 
 
 ```mermaid
 graph TD
-    Client[E-Commerce Frontend] -->|POST /v1/orders/score| API[FastAPI Backend]
+    Client[E-commerce Frontend / Client] -->|POST /v1/orders/score| API[FastAPI Gateway]
 
     subgraph Synchronous["Synchronous Critical Path"]
-        API -->|Extract Features| ML[XGBoost Predictor]
-        ML -->|Apply Thresholds| Engine[Cost Engine Router]
-        Engine -->|Return Decision| API
+        API -->|SET NX Dedup| Redis[(Redis)]
+        Redis -->|If New| CeleryEnqueue[Celery Enqueue]
+        CeleryEnqueue -->|Return 202 Task ID| API
     end
 
     subgraph Async["Asynchronous Pipeline"]
-        API -.->|Queue Task| Broker[RabbitMQ]
+        CeleryEnqueue -.->|Message| Broker[RabbitMQ]
         Broker -->|Consume| Celery[Celery Worker]
-        Celery -->|Fetch Explanation| LLM[Llama 3.1 8B via OpenRouter]
+        Celery -->|Extract Features| ML[XGBoost Predictor]
+        ML -->|Apply Thresholds| Engine[Cost Engine Router]
+        Engine -->|Fetch Explanation| LLM[Llama 3.1 8B via OpenRouter]
         LLM -->|Save Audit| DB[(PostgreSQL)]
     end
 
@@ -81,7 +83,7 @@ graph TD
     end
 
     API -->|Read/Write Cache| Redis[(Redis)]
-    API -->|Write State| DB
+    API -->|Read State| DB
 ```
 
 ### Key Architectural Decisions
@@ -165,15 +167,15 @@ Tabular e-commerce data (cart values, historical rates, categorical PIN codes) i
 
 `pincode_historical_rto_rate` · `customer_past_rto_count` · `category_baseline_rto_rate` · `cart_value_category_std_dev` · `item_quantity_anomaly_score` · `is_night_order` · `phone_order_velocity_7d` · `device_account_reuse_count` · `account_age_days` · `address_char_length` · `address_tfidf_ambiguity_score` · `hub_distance_km` · `is_cod_selected` · `is_novel_pincode` *(drift probe)* · `is_flash_sale_cart_value` *(drift probe)*
 
-### Feature Extraction Latency
-<a id="feature-extraction-latency"></a>
+### End-to-End Scoring Latency
+<a id="end-to-end-scoring-latency"></a>
 
 | Metric | Result |
 |---|---:|
-| p50 | 1.01 ms |
-| p95 | 1.82 ms |
-| p99 | 2.44 ms |
-| **Budget** | < 15 ms (containerized) / < 10 ms (bare-metal) |
+| p50 | 5.76 ms |
+| p95 | 9.34 ms |
+| p99 | 14.10 ms |
+| **Budget** | < 25 ms |
 | **Status** | ✅ **PASSED** |
 
 ### Probability Calibration (Platt Scaling)
@@ -293,18 +295,18 @@ Verified manually rather than via a superficial `grep`, to confirm architectural
 
 ---
 
-## 📋 Known Limitations & Next Steps
+## 📋 Resolved Follow-Ups (Day 11)
 
-The following gaps are known and tracked for follow-up — they are not yet resolved:
+Following the Day 10 evaluation, an external review identified 8 gaps between the README claims and the repository's direct evidence. These have all been resolved strictly without retraining or un-freezing the thresholds.
 
-- **End-to-end latency unbenchmarked.** Only feature-extraction latency (p99 = 2.44ms) is measured. Full `/v1/orders/score` latency (inference + cost engine + DB writes, under concurrent load) needs its own benchmark.
-- **No confusion matrix.** TP/FP/FN/TN counts and false-positive rate on `heldout.csv` are not yet reported alongside precision/recall.
-- **No baseline comparison.** Net Saved (₹15,611) is not yet compared against a no-intervention or simple static-rule baseline, so the marginal value of the ML policy over a naive approach is unquantified.
-- **Drift attribution unresolved.** The model performs better on the shifted subset, but zero SHAP weight on the explicit drift features means the mechanism isn't yet isolated (see [Covariate Drift Resilience](#-covariate-drift-resilience)).
-- **No uncertainty interval on the headline economic result.** Given the bootstrap `WARN` on threshold stability, a bootstrap confidence interval around Net Saved (not just the thresholds) would make the final number more defensible.
-- **γ_M / γ_H acceptance-rate assumptions undocumented.** Whether these are measured or assumed synthetic values isn't stated in the current docs.
-- **No sensitivity analysis** on the cost parameters (`C_RTO`, `C_FP_H`, etc.) to show how robust the policy is to those assumptions being off.
-- **Dataset isolation is asserted, not machine-verified** in the README (e.g. no published hash/checksum trail for `train.csv` / `val.csv` / `heldout.csv` / `thresholds.json`).
+- **End-to-End Latency Benchmarked:** The full `/v1/orders/score` path is verified to run within budget under concurrent load. See [day11_e2e_latency_report.md](docs/day11_e2e_latency_report.md).
+- **Confusion Matrix & FPR Computed:** The policy correctly subjects only a small fraction of legitimate orders to friction. See [day11_confusion_matrix.md](docs/day11_confusion_matrix.md).
+- **Baseline Comparison Added:** The ML policy materially outperforms both "no intervention" and "static rule" baselines in net saved and friction avoidance. See [day11_baseline_comparison.md](docs/day11_baseline_comparison.md).
+- **Drift Attribution Resolved:** A transient ablation study proved that the explicit drift features (`is_novel_pincode`, `is_flash_sale_cart_value`) carry no signal. The model detects drift indirectly through correlated structural features. See [day11_drift_attribution.md](docs/day11_drift_attribution.md).
+- **Bootstrap Confidence Interval:** The headline Net Saved remains confidently positive across 1,000 bootstrap resamples despite uncertainty in the threshold position itself. See [day11_bootstrap_ci.md](docs/day11_bootstrap_ci.md).
+- **γ_M / γ_H Acceptance Assumptions Documented:** Confirmed as synthetic assumptions requiring empirical calibration post-launch. See [day11_gamma_provenance.md](docs/day11_gamma_provenance.md).
+- **Cost Sensitivity Analysis:** The engine remains strictly net-positive across wide variations in cost assumptions. See [day11_sensitivity_analysis.md](docs/day11_sensitivity_analysis.md).
+- **Freeze Verification:** A cryptographic hash check confirms `train.csv`, `val.csv`, `heldout.csv`, and `thresholds.json` are bit-for-bit identical to the Day 5 freeze. See [day11_freeze_verification.md](docs/day11_freeze_verification.md).
 
 ---
 

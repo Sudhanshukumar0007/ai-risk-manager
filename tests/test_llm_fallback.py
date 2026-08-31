@@ -208,6 +208,8 @@ async def test_duplicate_post_statuses(test_client: AsyncClient, async_session):
     # This drives the Redis fast-path duplicate branch, which fetches the existing
     # audit_log row and returns it as a 200 with full explanation fields.
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = AsyncMock(return_value=None)  # None = key already existed
     original_redis = getattr(_app.state, "redis", None)
     _app.state.redis = mock_redis

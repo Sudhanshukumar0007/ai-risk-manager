@@ -87,10 +87,18 @@ def _load_thresholds() -> dict[str, float]:
 from app.services.router import route
 
 # ── Sync DB (Celery workers use sync SQLAlchemy) ──────────────────────────────
+_sync_engine = None
 
 def _get_sync_session() -> Session:
-    engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
-    return Session(engine)
+    global _sync_engine
+    if _sync_engine is None:
+        _sync_engine = create_engine(
+            settings.database_url_sync, 
+            pool_pre_ping=True, 
+            pool_size=2, 
+            max_overflow=3
+        )
+    return Session(_sync_engine)
 
 
 def _insert_audit_log_sync(

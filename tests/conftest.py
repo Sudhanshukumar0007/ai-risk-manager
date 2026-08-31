@@ -64,6 +64,7 @@ TRUNCATE TABLE
     llm_explanations,
     scoring_failures,
     payment_link_state,
+    webhook_events,
     audit_log
 RESTART IDENTITY CASCADE;
 """

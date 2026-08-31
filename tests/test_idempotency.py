@@ -108,6 +108,8 @@ async def test_sequential_duplicate_single_row(test_client, app):
         return True if call_count["n"] == 1 else None  # first=new, second=duplicate
 
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = mock_redis_set
     app.state.redis = mock_redis
 
@@ -151,6 +153,8 @@ async def test_concurrent_duplicate_single_row(test_client, app):
         return next(set_results)
 
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = mock_redis_set
     app.state.redis = mock_redis
 
@@ -207,6 +211,8 @@ async def test_redis_unavailable_postgres_catches_duplicate(test_client, app):
     payload = _make_payload(event_id=eid)
 
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = AsyncMock(side_effect=RedisError("timeout"))
     app.state.redis = mock_redis
 
@@ -243,6 +249,8 @@ async def test_postgres_unavailable_returns_503(test_client, app):
     payload = _make_payload(event_id=eid)
 
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = AsyncMock(side_effect=RedisError("timeout"))
     app.state.redis = mock_redis
 
@@ -394,6 +402,8 @@ async def test_resubmission_after_exhausted_retries(test_client, app):
         return None       # key already exists (duplicate)
 
     mock_redis = AsyncMock()
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock()
     mock_redis.set = mock_redis_set
     app.state.redis = mock_redis
 

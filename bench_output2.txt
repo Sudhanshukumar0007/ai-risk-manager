@@ -1,0 +1,21 @@
+Benchmarking internal stages (n=1000)...
+Internal Benchmarks (ms):
+Feature Extraction: p50=2.575, p95=9.999, p99=13.357
+Model Inference: p50=10.219, p95=23.889, p99=33.480
+Routing: p50=0.006, p95=0.009, p99=0.024
+
+Benchmarking full request (Concurrency=1, n=20)...
+
+Benchmarking full request (Concurrency=50, n=200)...
+
+API (C=1) Decision: p50=8.950, p95=13.253, p99=13.450
+  └─ Redis Dedup:          p50=0.892  p99=3.635
+  └─ Celery Dispatch:      p50=2.496  p99=4.614
+  └─ Server Trace Total:   p50=3.567  p99=6.972
+API (C=1) Audit: p50=0.000, p95=0.000, p99=0.000
+
+API (C=50) Decision: p50=456.462, p95=3191.192, p99=3962.577
+  └─ Redis Dedup:          p50=23.573  p99=525.605
+  └─ Celery Dispatch:      p50=36.889  p99=3024.622
+  └─ Server Trace Total:   p50=111.965  p99=3488.274
+API (C=50) Audit: p50=0.000, p95=0.000, p99=0.000

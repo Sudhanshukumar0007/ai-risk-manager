@@ -10,7 +10,7 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)
 ![Status](https://img.shields.io/badge/status-submission--ready-brightgreen.svg)
 
-**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~8ms (p99 at C=1).**
+**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~8ms (p99 at C=1, scaling to ~2.1s p99 at C=50).**
 
 > **Note on latency scope:** End-to-end `/v1/orders/score` latency (including inference, the cost-engine router, and DB writes) is benchmarked in [e2e_latency_report.md](eval/e2e_latency_report.md).
 
@@ -63,18 +63,18 @@ The thresholds separating these tiers aren't guessed — they're derived from a 
 graph TD
     Client[E-commerce Frontend / Client] -->|POST /v1/orders/score| API[FastAPI Gateway]
 
-    subgraph Synchronous["Synchronous Critical Path"]
-        API -->|SET NX Dedup| Redis[(Redis)]
-        Redis -->|If New| CeleryEnqueue[Celery Enqueue]
-        CeleryEnqueue -->|Return 202 Task ID| API
+    subgraph Synchronous["Synchronous Critical Path (< 8ms)"]
+        API -->|Rate Limit Check| Redis[(Redis)]
+        API -->|Extract Features| API
+        API -->|XGBoost Predictor| API
+        API -->|Cost Engine Router| API
+        API -->|Return 200 OK| Client
     end
 
-    subgraph Async["Asynchronous Pipeline"]
-        CeleryEnqueue -.->|Message| Broker[RabbitMQ]
+    subgraph Async["Asynchronous Audit Pipeline"]
+        API -.->|Fire-and-forget Event| Broker[RabbitMQ]
         Broker -->|Consume| Celery[Celery Worker]
-        Celery -->|Extract Features| ML[XGBoost Predictor]
-        ML -->|Apply Thresholds| Engine[Cost Engine Router]
-        Engine -->|Fetch Explanation| LLM[Llama 3.1 8B via OpenRouter]
+        Celery -->|Fetch Explanation| LLM[Llama 3.1 8B via OpenRouter]
         LLM -->|Save Audit| DB[(PostgreSQL)]
     end
 
@@ -82,20 +82,24 @@ graph TD
         DB -->|Query Metrics| Dashboard[Streamlit Dashboard]
     end
 
-    API -->|Read/Write Cache| Redis[(Redis)]
-    API -->|Read State| DB
+    API -->|Atomic Insert| DB
 ```
 
 ### Key Architectural Decisions
 
 **1. Bulletproof webhook idempotency (insert-and-catch).**
-Razorpay webhooks can fire multiple times for the same event under network retries. Rather than a `SELECT → if not exists → INSERT` pattern (vulnerable to race conditions under concurrency), a strict PostgreSQL `UNIQUE` constraint on `event_id` is enforced. The system executes an `INSERT` and catches the constraint-violation exception, guaranteeing idempotency at the database level. Redis is used only as a fast-path cache to short-circuit repeated requests — never as the source of truth.
+Razorpay webhooks can fire multiple times for the same event under network retries. Rather than using distributed cache locks or read-then-write logic (vulnerable to race conditions), a strict PostgreSQL `UNIQUE` constraint on `event_id` is enforced. The system executes an atomic `INSERT INTO webhook_events ... ON CONFLICT (razorpay_event_id) DO NOTHING`. Duplicate deliveries are safely absorbed by the database without race conditions during concurrent retries.
 
-**2. Decoupled LLM explanations (fire-and-forget async).**
-Llama 3.1 8B (via OpenRouter) generates human-readable audit explanations for support teams (e.g. *"Flagged due to high cart value anomaly combined with a novel PIN code"*). LLM calls are high-latency and failure-prone, so they are fully decoupled from the checkout flow: the API scores and returns a decision in milliseconds, then dispatches a Celery task over RabbitMQ. If the LLM provider times out or errors, the system falls back to a deterministic message — `"Flagged for manual review — explanation unavailable"` — without ever blocking or failing the checkout.
+**2. Synchronous scoring, decoupled LLM explanations.**
+Scoring and tier routing happen synchronously inside FastAPI in under 8 ms, immediately returning an HTTP 200 OK. Llama 3.1 8B generates human-readable audit explanations asynchronously. LLM calls are high-latency and failure-prone, so they are fully decoupled: the API scores and dispatches a Celery task over RabbitMQ on a fire-and-forget basis. If the LLM provider times out, it falls back to a deterministic message without blocking checkout.
 
 **3. RabbitMQ over Redis as the Celery broker.**
 Redis stays dedicated to low-latency caching and rate-limiting. RabbitMQ provides the durable, persistent queue needed for background LLM worker tasks, so the two responsibilities never contend with each other.
+
+### Operational Security & Defense
+
+- **API Rate Limiting:** The synchronous order scoring interface (`POST /v1/orders/score`) is protected against volumetric denial-of-service and credential scraping by a Redis-backed fixed-window rate limiter (100 requests per minute per IP), returning HTTP 429 upon breach.
+- **Dashboard Authentication:** The analytical Streamlit observability dashboard (`/dashboard`) is gated by an authentication barrier verifying credentials against the `DASHBOARD_PASSWORD` environment variable (default: `risk_admin`).
 
 ---
 
@@ -165,7 +169,9 @@ Tabular e-commerce data (cart values, historical rates, categorical PIN codes) i
 
 ### Feature Set (15 engineered features)
 
-`pincode_historical_rto_rate` · `customer_past_rto_count` · `category_baseline_rto_rate` · `cart_value_category_std_dev` · `item_quantity_anomaly_score` · `is_night_order` · `phone_order_velocity_7d` · `device_account_reuse_count` · `account_age_days` · `address_char_length` · `address_tfidf_ambiguity_score` · `hub_distance_km` · `is_cod_selected` · `is_novel_pincode` *(drift probe)* · `is_flash_sale_cart_value` *(drift probe)*
+`pincode_historical_rto_rate` · `customer_past_rto_count` · `category_baseline_rto_rate` · `cart_value_category_std_dev` · `item_quantity_anomaly_score` · `is_night_order` · `phone_order_velocity_7d` · `device_account_reuse_count` · `account_age_days` · `address_char_length` · `address_tfidf_ambiguity_score` · `hub_distance_km` · `is_cod_selected` · `is_novel_pincode` *(drift probe, 0.0000 SHAP weight)* · `is_flash_sale_cart_value` *(drift probe, 0.0000 SHAP weight)*
+
+> **Note on Feature Drift Attribution:** SHAP analysis confirmed zero marginal weight on the explicit `is_novel_pincode` and `is_flash_sale_cart_value` indicators, proving that the engine captures covariate shift indirectly through correlated baseline features rather than these explicit drift probes.
 
 ### End-to-End Scoring Latency
 <a id="end-to-end-scoring-latency"></a>

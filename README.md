@@ -21,17 +21,18 @@ Built for Buildathon Track 02 as an end-to-end RTO decision engine with frozen e
 ## Table of Contents
 
 - [The Problem](#-the-problem)
-- [The Solution](#-the-solution-a-three-tier-dynamic-engine)
+- [The Solution: A Three-Tier Dynamic Engine](#-the-solution-a-three-tier-dynamic-engine)
 - [System Architecture](#-system-architecture)
-- [The Micro-Economic Cost Engine](#-the-micro-economic-cost-engine)
+- [Micro-Economic Cost Engine](#-micro-economic-cost-engine)
 - [Machine Learning Pipeline](#-machine-learning-pipeline)
-- [Threshold Stability & Statistical Honesty](#-threshold-stability--statistical-honesty)
-- [Held-Out Evaluation Results](#-held-out-evaluation-results)
-- [Covariate Drift Resilience](#-covariate-drift-resilience)
-- [Reliability & Fault Injection Evidence](#-reliability--fault-injection-evidence)
+- [Statistical Validation & Threshold Stability](#-statistical-validation--threshold-stability)
+- [Held-Out Evaluation](#-held-out-evaluation)
+- [Covariate Shift Analysis](#-covariate-shift-analysis)
+- [Reliability & Graceful Degradation](#-reliability--graceful-degradation)
 - [Behavioral Compliance Checklist](#-behavioral-compliance-checklist)
 - [Additional Validation & Reliability Evidence](#-additional-validation--reliability-evidence)
 - [Observability Dashboard](#-observability-dashboard)
+- [Known Limitations & Next Steps](#-known-limitations--next-steps)
 - [Running Locally](#-running-locally)
 
 ---
@@ -98,7 +99,7 @@ Redis stays dedicated to low-latency caching and rate-limiting. RabbitMQ provide
 
 ---
 
-## 📐 The Micro-Economic Cost Engine
+## 📐 Micro-Economic Cost Engine
 
 Thresholds aren't hand-picked — they fall out of a closed-form breakeven calculation that balances the cost of a False Positive (friction on a good customer) against the value of a True Positive (freight saved on a real RTO).
 
@@ -152,7 +153,7 @@ The chosen thresholds are deliberately *not* the mathematically exact breakeven 
 This asymmetry was selected via grid search over the validation set:
 
 ![Net Saved heatmap over (t_low, t_high) grid search](eval/threshold_heatmap.png)
-*Net Saved (₹) across the (t_low, t_high) grid. The optimum sits in a stable, wide dark-blue plateau around t_high ≈ 0.55–0.70 rather than at a sharp, fragile peak — supporting the choice of `[0.50, 0.75]` as a robust, near-optimal operating point rather than an overfit one.*
+*Net Saved (₹) across the (t_low, t_high) grid. The optimum sits in a wide plateau around t_high ≈ 0.55–0.70 rather than at a sharp, fragile peak — supporting the choice of `[0.50, 0.75]` as a validation-selected and frozen operating point.*
 
 ---
 
@@ -206,36 +207,36 @@ To confirm the model attends to novelty signals without leaking held-out data, m
 
 ---
 
-## 🔬 Threshold Stability & Statistical Honesty
+## 🔬 Statistical Validation & Threshold Stability
 
-Two integrity issues were deliberately surfaced and resolved rather than papered over:
+**Specification gaps:** The implementation specification did not provide explicit scalar acceptance thresholds for KS-statistic and Brier score. These values were therefore not invented. ECE is evaluated against the only explicit specification threshold available (`ECE < 0.08`), while additional data-integrity and validation checks are used to assess model reliability.
 
-### Missing Specification Thresholds
+### Statistical Validation Gates
 
-The implementation specification was missing exact scalar targets for the KS-statistic and Brier score. Rather than inventing arbitrary numbers, these were **not fabricated**. Only the one threshold that *was* explicitly specified — **ECE < 0.08** — is enforced as a hard gate. In its place, a systemic fallback gate list is enforced instead:
+1. **Calibration:** ECE < 0.08
+2. **Base-rate stability:** train/fit, calibration, and validation splits remain within ±3pp of the 24% design target
+3. **Data isolation:** zero row-ID or feature-hash overlap across splits
+4. **Feature-domain integrity:** all 15 features remain within documented valid ranges
+5. **Controlled covariate shift:** injected shift is detectable in held-out data and absent from train/validation
+6. **Reproducibility:** identical seed produces identical model weights
 
-1. **ECE < 0.08** — the one valid, explicitly-specified scalar gate
-2. **Base-rate stability** — RTO base rate in the `train/fit`, `calibration`, and `val` splits within ±3pp of the 24% design target. *(This gate applies only to those three splits — `heldout.csv` is not held to this target and its blended RTO rate, ~14.7% from the shifted/non-shifted breakdown below, is not a violation of it.)*
-3. **Absolute data isolation** — zero row-ID or feature-hash overlap across splits
-4. **Domain integrity** — all 15 features within documented valid ranges
-5. **Controlled covariate shift** — the injected 10% shift is detectable in `heldout.csv`, absent from `train.csv`/`val.csv`
-6. **Deterministic training** — same seed → same weights, verified by hash
+> **Note:** The 24% base-rate gate applies only to development/calibration splits. The held-out set is intentionally evaluated independently and is not required to match the development base rate.
 
 Brier Score and ECE are still *calculated and reported* for diagnostic visibility — they're just no longer treated as invented pass/fail scalars.
 
 ### Threshold Stability Under Bootstrap
 
-A 5-fold bootstrap resample of `val.csv` was used to assess threshold stability given the validation set's limited positive class (~110 RTO rows):
+A bootstrap analysis of `val.csv` was used to quantify uncertainty in the selected thresholds:
 
 | t_low mean | t_high mean | t_low variance | t_high variance |
 |---:|---:|---:|---:|
 | 0.460 | 0.645 | 0.008 | 0.0276 |
 
-**Gate decision: `WARN`.** `t_high` moved across a ~0.25 range (0.55–0.80) and Net Saved varied by up to ~28% across bootstrap folds — a reflection of the validation set's small positive-class size, not instability in the cost model itself. Thresholds were **kept frozen** at `[0.50, 0.75]` (selected on the full `val.csv`, not a resampled fold), with no retuning based on bootstrap noise. This residual uncertainty was carried forward and reported transparently in the final held-out evaluation rather than quietly resolved.
+**Result: `WARN`.** `t_high` varied from approximately 0.55–0.80 across bootstrap samples, and Net Saved varied by up to ~28%. This reflects uncertainty from the validation set's limited positive class rather than evidence that the cost formulation itself is unstable. The production thresholds remain frozen at `[0.50, 0.75]`; no retuning was performed using bootstrap results.
 
 ---
 
-## 🏆 Held-Out Evaluation Results
+## 🏆 Held-Out Evaluation
 
 Evaluated **blind** on `data/heldout.csv`, with `config/thresholds.json` verified unmodified since the initial freeze — no retuning on the test set.
 
@@ -250,7 +251,7 @@ The chosen production thresholds achieve the **highest Net Saved among the four 
 
 ---
 
-## 🌊 Covariate Drift Resilience
+## 🌊 Covariate Shift Analysis
 
 To test production resilience, a synthetic "flash sale" behavior pattern was injected into novel PIN codes. The model was then evaluated separately on the shifted vs. non-shifted subsets of `heldout.csv`:
 
@@ -261,17 +262,18 @@ To test production resilience, a synthetic "flash sale" behavior pattern was inj
 
 The model's overall decisions remain effective under the shift: the shifted subset carries ~3x the RTO rate, and the policy's Net Saved per order nearly doubles there (₹20.06 vs ₹11.65), so interventions do intensify where risk is higher.
 
-**However, this is not attributable to the explicit drift-probe features.** The [drift-awareness diagnostic](#drift-awareness-diagnostic) measured **zero marginal SHAP weight** for both `is_novel_pincode` and `is_flash_sale_cart_value` — meaning the model is not directly using the two features designed to signal novelty. The improved performance on the shifted subset is more likely explained by other correlated features (e.g. address/hub-distance signals for new pincodes) picking up the same risk indirectly, rather than the model having learned an explicit "this is a drifted pincode" representation. This distinction matters and is flagged as an open item — see [Known Limitations](#-known-limitations--next-steps).
+**However, this is not attributable to the explicit drift-probe features.** The [drift-awareness diagnostic](#drift-awareness-diagnostic) measured **zero marginal SHAP weight** for both `is_novel_pincode` and `is_flash_sale_cart_value` — meaning the model is not directly using the two features designed to signal novelty. The improved performance on the shifted subset is more likely explained by other correlated features (e.g. address/hub-distance signals for new pincodes) picking up the same risk indirectly, rather than the model having learned an explicit "this is a drifted pincode" representation. This distinction matters and is documented in [Known Limitations & Next Steps](#-known-limitations--next-steps).
 
 ---
 
-## 🛡 Reliability & Fault Injection Evidence
+## 🛡 Reliability & Graceful Degradation
 
-Two fault-injection scenarios were recorded on video as empirical proof of graceful degradation:
+The finished architecture enforces two critical reliability invariants under operational stress:
 
-**Clip 1 — LLM key revocation.** The OpenRouter API key is invalidated and the Celery worker restarted. A high-risk order is scored via the live API; the checkout path completes normally and instantly, while the audit log shows `explanation_status: "fallback"` with the message *"Flagged for manual review — explanation unavailable"* — demonstrating that LLM degradation does not block the synchronous scoring path in this recorded scenario.
+- **LLM Graceful Degradation:** LLM explanations run asynchronously. If the provider times out or fails, the core scoring decision remains available and the audit record receives the deterministic fallback: `"Flagged for manual review — explanation unavailable"`.
+- **Webhook Idempotency:** Duplicate signed webhook deliveries are safely absorbed by the PostgreSQL `UNIQUE` constraint on `event_id`. Replaying the same event does not create duplicate database records or alter settled payments.
 
-**Clip 2 — Webhook idempotency.** The same signed Razorpay webhook payload is replayed twice. Both requests return `200 OK`, but the database row count does not increase on the duplicate — demonstrating that the PostgreSQL `UNIQUE` constraint absorbs a real duplicate HTTP replay, not just a unit-test simulation.
+**Validation:** Both behaviors were verified through live fault-injection tests.
 
 **LLM explanation API — response shapes:**
 
@@ -328,6 +330,15 @@ A **Streamlit dashboard** (`/dashboard`) connects directly to PostgreSQL to surf
 - Pipeline latency and throughput metrics
 - Visual breakdown of tier interventions (`ALLOW_COD` / `NUDGE_PREPAY` / `SOFT_GATE_COD`)
 - Covariate drift diagnostics and feature-importance tracking
+
+---
+
+## ⚠️ Known Limitations & Next Steps
+
+1. **High-Concurrency Queue Contention:** Under burst load ($C=50$), decision latency degrades to ~2.1s (p99), dominated by Celery dispatch connection pooling and FastAPI request queueing. Next step: configure AMQP broker connection pools and tune uvicorn worker concurrency.
+2. **Indirect Drift Mechanism:** The model successfully handles covariate shift on novel pincodes, but attribution analysis confirmed zero marginal SHAP weight on explicit probe features (`is_novel_pincode`, `is_flash_sale_cart_value`). Drift is absorbed indirectly via correlated features rather than explicit novelty representations.
+3. **Synthetic Friction Acceptance Assumptions:** Conversion rates under intervention (`γ_M = 0.25`, `γ_H = 0.45`) are modeled economic assumptions. Next step: empirically calibrate these via post-launch canary/shadow A/B testing.
+4. **Validation Positive-Class Variance:** Bootstrap stability analysis (`WARN`) highlighted sensitivity in `t_high` due to the limited positive-class sample size (~110 RTO cases). While the frozen policy is mathematically proven net-positive across all resamples, larger production validation volumes will further stabilize optimal cutoff selection.
 
 ---
 

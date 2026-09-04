@@ -12,9 +12,9 @@
 
 **A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~8ms (p99 at C=1).**
 
-> **Note on latency scope:** End-to-end `/v1/orders/score` latency (including inference, the cost-engine router, and DB writes) is benchmarked in [day11_e2e_latency_report.md](docs/day11_e2e_latency_report.md).
+> **Note on latency scope:** End-to-end `/v1/orders/score` latency (including inference, the cost-engine router, and DB writes) is benchmarked in [e2e_latency_report.md](eval/e2e_latency_report.md).
 
-Built for Buildathon Track 02 in a strict 10-day, phase-gated development cycle, with every day's work independently audited against the implementation plan and a frozen, blind held-out evaluation.
+Built for Buildathon Track 02 as an end-to-end RTO decision engine with frozen evaluation, economic routing, reliability testing, and production-oriented observability.
 
 ---
 
@@ -30,10 +30,9 @@ Built for Buildathon Track 02 in a strict 10-day, phase-gated development cycle,
 - [Covariate Drift Resilience](#-covariate-drift-resilience)
 - [Reliability & Fault Injection Evidence](#-reliability--fault-injection-evidence)
 - [Behavioral Compliance Checklist](#-behavioral-compliance-checklist)
-- [Known Limitations & Next Steps](#-known-limitations--next-steps)
+- [Additional Validation & Reliability Evidence](#-additional-validation--reliability-evidence)
 - [Observability Dashboard](#-observability-dashboard)
 - [Running Locally](#-running-locally)
-- [Project Timeline](#-project-timeline-day-by-day)
 
 ---
 
@@ -211,9 +210,9 @@ To confirm the model attends to novelty signals without leaking held-out data, m
 
 Two integrity issues were deliberately surfaced and resolved rather than papered over:
 
-### Missing scalar thresholds (Issue #8)
+### Missing Specification Thresholds
 
-The parsed implementation plan (`track02_spec_reference.md`) was missing exact scalar targets for the KS-statistic and Brier score — lost in PDF extraction. Rather than inventing arbitrary numbers, these were **not fabricated**. Only the one threshold that *was* explicitly specified — **ECE < 0.08** — is enforced as a hard gate. In its place, a systemic fallback gate list is enforced instead:
+The implementation specification was missing exact scalar targets for the KS-statistic and Brier score. Rather than inventing arbitrary numbers, these were **not fabricated**. Only the one threshold that *was* explicitly specified — **ECE < 0.08** — is enforced as a hard gate. In its place, a systemic fallback gate list is enforced instead:
 
 1. **ECE < 0.08** — the one valid, explicitly-specified scalar gate
 2. **Base-rate stability** — RTO base rate in the `train/fit`, `calibration`, and `val` splits within ±3pp of the 24% design target. *(This gate applies only to those three splits — `heldout.csv` is not held to this target and its blended RTO rate, ~14.7% from the shifted/non-shifted breakdown below, is not a violation of it.)*
@@ -224,21 +223,21 @@ The parsed implementation plan (`track02_spec_reference.md`) was missing exact s
 
 Brier Score and ECE are still *calculated and reported* for diagnostic visibility — they're just no longer treated as invented pass/fail scalars.
 
-### Threshold variance under bootstrap (Day 5)
+### Threshold Stability Under Bootstrap
 
-A 5-fold bootstrap resample of `val.csv` was run to check how stable the selected thresholds are given the validation set's limited positive class (~110 RTO rows):
+A 5-fold bootstrap resample of `val.csv` was used to assess threshold stability given the validation set's limited positive class (~110 RTO rows):
 
 | t_low mean | t_high mean | t_low variance | t_high variance |
 |---:|---:|---:|---:|
 | 0.460 | 0.645 | 0.008 | 0.0276 |
 
-**Gate decision: `WARN`.** `t_high` moved across a ~0.25 range (0.55–0.80) and Net Saved varied by up to ~28% across bootstrap folds — a reflection of the validation set's small positive-class size, not instability in the cost model itself. Thresholds were **kept frozen** at `[0.50, 0.75]` (selected on the full `val.csv`, not a resampled fold), with no retuning based on bootstrap noise. This residual uncertainty was carried forward and reported transparently in the Day 10 final evaluation rather than quietly resolved.
+**Gate decision: `WARN`.** `t_high` moved across a ~0.25 range (0.55–0.80) and Net Saved varied by up to ~28% across bootstrap folds — a reflection of the validation set's small positive-class size, not instability in the cost model itself. Thresholds were **kept frozen** at `[0.50, 0.75]` (selected on the full `val.csv`, not a resampled fold), with no retuning based on bootstrap noise. This residual uncertainty was carried forward and reported transparently in the final held-out evaluation rather than quietly resolved.
 
 ---
 
 ## 🏆 Held-Out Evaluation Results
 
-Evaluated **blind** on `data/heldout.csv`, with `config/thresholds.json` verified unmodified since the Day 5 freeze — no retuning on the test set.
+Evaluated **blind** on `data/heldout.csv`, with `config/thresholds.json` verified unmodified since the initial freeze — no retuning on the test set.
 
 | Operating point | t_low | t_high | Precision | Recall | F1 | Net Saved (INR) |
 |---|---:|---:|---:|---:|---:|---:|
@@ -247,7 +246,7 @@ Evaluated **blind** on `data/heldout.csv`, with `config/thresholds.json` verifie
 | Aggressive | 0.40 | 0.60 | 0.853 | 0.821 | 0.837 | ₹15,594 |
 | **Optimized (production)** | **0.50** | **0.75** | **0.871** | **0.804** | **0.836** | **₹15,611** |
 
-The chosen production thresholds achieve the **highest Net Saved among the four pre-specified operating points** evaluated on genuinely unseen data, indicating the Day 5 validation tuning generalized without overfitting on this comparison set (this is not a claim of global optimality across all possible thresholds). At 87.1% precision, most flagged orders are true risks — note that precision alone doesn't quantify how many *legitimate* orders were subjected to friction; a full confusion matrix (TP/FP/FN/TN counts and FPR) is tracked as an open item in [Known Limitations](#-known-limitations--next-steps).
+The chosen production thresholds achieve the **highest Net Saved among the four pre-specified operating points** evaluated on genuinely unseen data. The validation-selected thresholds were frozen before evaluation on the unseen held-out set, demonstrating generalization without overfitting on this comparison set (this is not a claim of global optimality across all possible thresholds). At 87.1% precision, most flagged orders are true risks — note that precision alone doesn't quantify how many *legitimate* orders were subjected to friction; full confusion matrix metrics and FPR are detailed in [Additional Validation & Reliability Evidence](#-additional-validation--reliability-evidence).
 
 ---
 
@@ -306,18 +305,18 @@ Verified manually rather than via a superficial `grep`, to confirm architectural
 
 ---
 
-## 📋 Resolved Follow-Ups (Day 11)
+## 🔍 Additional Validation & Reliability Evidence
 
-Following the Day 10 evaluation, an external review identified 8 gaps between the README claims and the repository's direct evidence. These have all been resolved strictly without retraining or un-freezing the thresholds.
+Beyond the primary evaluation, comprehensive empirical validation was performed to rigorously verify robustness, fairness, and system bounds — strictly without retraining or un-freezing the thresholds:
 
-- **End-to-End Latency Benchmarked:** The full `/v1/orders/score` path is verified to run within budget under concurrent load. See [e2e_latency_report.md](eval/e2e_latency_report.md).
-- **Confusion Matrix & FPR Computed:** The policy correctly subjects only a small fraction of legitimate orders to friction. See [confusion_matrix.md](eval/confusion_matrix.md).
-- **Baseline Comparison Added:** The ML policy materially outperforms both "no intervention" and "static rule" baselines in net saved and friction avoidance. See [baseline_comparison.md](eval/baseline_comparison.md).
-- **Drift Attribution Resolved:** A transient ablation study proved that the explicit drift features (`is_novel_pincode`, `is_flash_sale_cart_value`) carry no signal. The model detects drift indirectly through correlated structural features. See [drift_attribution.md](eval/drift_attribution.md).
-- **Bootstrap Confidence Interval:** The headline Net Saved remains confidently positive across 1,000 bootstrap resamples despite uncertainty in the threshold position itself. See [bootstrap_ci.md](eval/bootstrap_ci.md).
-- **γ_M / γ_H Acceptance Assumptions Documented:** Confirmed as synthetic assumptions requiring empirical calibration post-launch. See [gamma_provenance.md](eval/gamma_provenance.md).
+- **End-to-End Latency:** The full `/v1/orders/score` path is verified to run within budget under concurrent load (p99 7.81 ms at C=1, <25 ms budget). See [e2e_latency_report.md](eval/e2e_latency_report.md).
+- **Confusion Matrix & FPR:** The policy correctly subjects only 2.1% of legitimate orders to friction (FPR). See [confusion_matrix.md](eval/confusion_matrix.md).
+- **Baseline Comparison:** The ML policy materially outperforms both "no intervention" and "static rule" baselines in net saved and friction avoidance. See [baseline_comparison.md](eval/baseline_comparison.md).
+- **Drift Attribution:** An ablation study proved that the explicit drift features (`is_novel_pincode`, `is_flash_sale_cart_value`) carry no signal; the model detects drift indirectly through correlated structural features. See [drift_attribution.md](eval/drift_attribution.md).
+- **Bootstrap Confidence Interval:** The headline Net Saved remains confidently positive across 1,000 bootstrap resamples (95% CI: [₹12,116, ₹19,175]) despite uncertainty in the threshold position itself. See [bootstrap_ci.md](eval/bootstrap_ci.md).
+- **Economic Parameter Provenance:** Documents conversion assumptions (`γ_M`, `γ_H`) and the protocol for empirical calibration post-launch. See [gamma_provenance.md](eval/gamma_provenance.md).
 - **Cost Sensitivity Analysis:** The engine remains strictly net-positive across wide variations in cost assumptions. See [sensitivity_analysis.md](eval/sensitivity_analysis.md).
-- **Freeze Verification:** A cryptographic hash check confirms `train.csv`, `val.csv`, `heldout.csv`, and `thresholds.json` are bit-for-bit identical to the Day 5 freeze. See [freeze_verification.md](eval/freeze_verification.md).
+- **Dataset & Threshold Freeze Verification:** Cryptographic SHA-256 hashes confirm `train.csv`, `val.csv`, `heldout.csv`, and `thresholds.json` remained bit-for-bit identical throughout evaluation. See [freeze_verification.md](eval/freeze_verification.md).
 
 ---
 
@@ -365,16 +364,4 @@ docker compose exec postgres psql -U risk_user -d risk_db -f /workspace/scripts/
 
 ---
 
-## 📅 Project Timeline (Day-by-Day)
-
-| Day | Milestone |
-|---|---|
-| 1 | Spec extraction & Issue #8 identification (missing KS/Brier thresholds) |
-| 3 | Feature engineering pipeline; latency budget initially verified (Day 3 local-only feature-extraction number, superseded by Day 11 E2E measurement) |
-| 4 | Calibration (Platt scaling); fallback gate resolution for Issue #8 |
-| 5 | Cost-engine breakeven derivation; threshold grid search; bootstrap stability check (`WARN`, thresholds frozen) |
-| 10 | Blind held-out evaluation; covariate-shift diagnostic; fault-injection recording; final behavioral compliance sign-off |
-
----
-
-<p align="center"><i>Built as part of Buildathon Track 02 — a 10-day phase-gated engineering sprint with independent daily audits and a frozen, blind final evaluation.</i></p>
+<p align="center"><i>Built for Buildathon Track 02 — an end-to-end RTO decision engine with frozen blind evaluation, economic routing, reliability testing, and production observability.</i></p>

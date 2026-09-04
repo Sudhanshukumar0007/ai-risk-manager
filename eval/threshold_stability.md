@@ -1,4 +1,4 @@
-# Day 05: Threshold Stability Report
+# Threshold Stability Report
 
 Due to the small size of the validation set and relatively low positive class counts, we performed a 5-fold bootstrap resampling of `val.csv` to assess the variance in the selected optimal thresholds.
 
@@ -30,5 +30,5 @@ instability in the cost model itself.
 Decision: thresholds remain frozen at `t_low=0.500`, `t_high=0.750` 
 (selected on the full `val.csv`, not a bootstrap fold). No retuning 
 is performed based on bootstrap variance. This residual uncertainty 
-is carried forward and must be reported — not resolved — in the 
-Day 10 final evaluation.
+is carried forward and reported transparently in the final held-out 
+evaluation.

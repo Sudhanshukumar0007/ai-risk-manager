@@ -1,7 +1,7 @@
 # Gamma Assumptions Provenance
 
 ## Overview
-In the Day 5 `CostEngine`, we model the likelihood of a customer successfully completing a prepaid checkout after being inconvenienced. This relies on two parameters:
+In the `CostEngine`, we model the likelihood of a customer successfully completing a prepaid checkout after being inconvenienced. This relies on two parameters:
 - `gamma_M`: The conversion rate when subjected to a soft nudge (default: 0.25).
 - `gamma_H`: The conversion rate when subjected to a hard gate (default: 0.45).
 

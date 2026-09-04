@@ -1,19 +1,19 @@
-# Day 10: Final Evaluation Report & Submission Checkpoint
+# Final Evaluation Report & Submission Checkpoint
 
 ## 1. Operating Point Selection & Breakeven Analysis
 
-During Day 5, we established the following cost dynamics for the two-tier intervention model:
+We established the following cost dynamics for the two-tier intervention model:
 
 - **M-Tier (Nudge Prepay) Breakeven Ratio:** 1.70:1 (Penalty of FP vs Gain of TP). This mathematically implies a breakeven probability of ~0.63.
 - **H-Tier (Soft Gate COD) Breakeven Ratio:** 1.66:1. This mathematically implies a breakeven probability of ~0.62.
 
-Our chosen operating point from the Day 5 grid search sweeps is `(t_low=0.50, t_high=0.75)`.
+Our chosen operating point from the validation grid search sweeps is `(t_low=0.50, t_high=0.75)`.
 While mathematically slightly conservative relative to the breakeven points (which would suggest thresholds around ~0.63), `t_low=0.50` acts as a wider funnel to capture more Nudge opportunities (where friction is low), while `t_high=0.75` acts as a highly conservative strict gate to avoid excessively penalizing good users with high friction.
 
 ## 2. Held-out Evaluation
 
 > [!NOTE]
-> The evaluation below was run completely blindly on `data/heldout.csv`. The `config/thresholds.json` file was strictly verified to be unmodified since Day 5 freezing, ensuring no re-tuning on the test set.
+> The evaluation below was run completely blindly on `data/heldout.csv`. The `config/thresholds.json` file was strictly verified to be unmodified since the initial freeze, ensuring no re-tuning on the test set.
 
 ### Two-Cutoff Threshold Table
 
@@ -24,9 +24,9 @@ While mathematically slightly conservative relative to the breakeven points (whi
 | Aggressive | 0.40 | 0.60 | 0.853 | 0.821 | 0.837 | ₹15,594 |
 | **Optimized (production)** | 0.50 | 0.75 | **0.871** | **0.804** | **0.836** | **₹15,611** |
 
-*Analysis*: The chosen optimized thresholds of `[0.50, 0.75]` achieve the highest absolute Net Saved (₹15,611) on the held-out set, proving that our Day 5 validation tuning generalized perfectly without overfitting. Precision is extremely high (87.1%), meaning very few false positives are subjected to interventions.
+*Analysis*: The chosen optimized thresholds of `[0.50, 0.75]` achieve the highest absolute Net Saved (₹15,611) on the held-out set, proving that our validation tuning generalized without overfitting. Precision is extremely high (87.1%), meaning very few false positives are subjected to interventions.
 
-## 3. Covariate Shift Diagnostic (Issue #2 & Issue #3)
+## 3. Covariate Shift Diagnostic
 
 As requested, we evaluated the model against the shifted subset of `heldout.csv` (simulating the synthetic "flash sale" distribution injected during the dataset generation).
 
@@ -40,7 +40,7 @@ As requested, we evaluated the model against the shifted subset of `heldout.csv`
 - The net saved *per order* is substantially higher in the shifted subset (₹20.06 vs ₹11.65), proving the model correctly intensified interventions on the novel pincodes.
 - **This confirms the model has learned robust representations of novelty/drift and dynamically adjusts its risk predictions without requiring manual intervention.**
 
-## 4. Behavioral Compliance Checklist (Issue #9)
+## 4. Behavioral & Architectural Compliance Checklist
 
 In place of a simple `grep`, the following manual verifications were performed to confirm architectural and behavioral safety:
 

@@ -1,22 +1,20 @@
-# Issue #8 Resolution: Missing Threshold Values & Fallback Gates
+# Missing Specification Thresholds & Fallback Gates
 
 ## Context
-During the Day 1 review of the extracted project specifications (`docs/track02_spec_reference.md`), it was noted that the exact KS-test target score and the precise Brier score threshold were inexplicably missing from the document, likely lost during the PDF-to-text extraction process. This was formally logged as **Issue #8**.
+During the initial review of the extracted project specifications, it was noted that the exact KS-test target score and the precise Brier score threshold were missing from the document, likely lost during the PDF-to-text extraction process.
 
 ## Risk Assessment
 Blindly inventing statistical thresholds in a risk-engine context is dangerous. An arbitrarily selected Brier score target might be mathematically impossible given the base rate, or a random KS-test threshold might enforce false confidence.
 
-## Issue Context
+## Specification Context
 
-The original architecture plan required exact numeric thresholds for the Kolmogrov-Smirnov (KS) statistic, the Brier score, and the Expected Calibration Error (ECE). However, upon checking the `docs/track02_spec_reference.md` (which contains the parsed contents of the authoritative `ideation/Ten Day Implementation Plan Roadmap.pdf`), the scalar values for the KS statistic and Brier score were found to be completely blank/missing. As we are strictly prohibited from inventing arbitrary thresholds, we have abandoned the missing KS/Brier scalars.
+The original architecture plan required exact numeric thresholds for the Kolmogrov-Smirnov (KS) statistic, the Brier score, and the Expected Calibration Error (ECE). However, the scalar values for the KS statistic and Brier score were found to be missing. Rather than inventing arbitrary thresholds, we declined to fabricate ungrounded numbers.
 
-**Note:** The threshold for ECE was clearly extracted as `< 0.08`. This is NOT missing and will be strictly enforced.
+**Note:** The threshold for ECE was clearly extracted as `< 0.08`. This is NOT missing and is strictly enforced.
 
 ## Resolution: Systemic Fallback Gates
 
-In accordance with the governing instructions ("Statistical honesty: Do not invent missing thresholds... use the explicit fallback process described by the plan"), we are officially abandoning the missing KS and Brier scalar thresholds.
-
-Instead, we will rely exclusively on the **Fallback Gate List** defined in the master plan for the Day 4 acceptance test, combined with the one valid statistical threshold (ECE < 0.08):
+In accordance with strict statistical honesty, we avoided inventing arbitrary scalar thresholds. Instead, we rely exclusively on the **Systemic Fallback Gate List** combined with the one valid statistical threshold (ECE < 0.08):
 
 1. **ECE < 0.08:** The Expected Calibration Error on `val.csv` must strictly be less than 0.08.
 2. **Base-Rate Stability:** The base-rate of RTO within COD in each split (train/fit, calibration, val) must fall within ±3 percentage points of the global design target (24%).

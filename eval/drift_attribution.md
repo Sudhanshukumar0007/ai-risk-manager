@@ -3,7 +3,7 @@ seed: 42
 ---
 # Drift Attribution & Ablation Study
 
-The Day 10 evaluation found the model performs exceptionally well on the drifted subset (novel pincodes/flash sales), yet the explicit drift probe features (`is_novel_pincode`, `is_flash_sale_cart_value`) had zero SHAP weight. We investigated the actual mechanism.
+The held-out evaluation found the model performs exceptionally well on the drifted subset (novel pincodes/flash sales), yet the explicit drift probe features (`is_novel_pincode`, `is_flash_sale_cart_value`) had zero SHAP weight. We investigated the actual mechanism.
 
 ## SHAP Attribution on Shifted Subset
 Actual average absolute SHAP values for `is_novel=1` rows:

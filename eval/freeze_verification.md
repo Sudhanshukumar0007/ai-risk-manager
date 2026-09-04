@@ -1,9 +1,9 @@
 # Dataset & Config Isolation Verification
 
-To ensure statistical honesty and strict blind evaluation, the datasets and threshold configuration were frozen at Day 5. This report provides the machine-verifiable cryptographic proof of that isolation.
+To ensure statistical honesty and strict blind evaluation, the datasets and threshold configuration were frozen prior to evaluation. This report provides the machine-verifiable cryptographic proof of that isolation.
 
 ## SHA-256 Hashes
-| File | Expected Hash (Day 5 Freeze) | Actual Hash | Match |
+| File | Expected Hash (Frozen Baseline) | Actual Hash | Match |
 |---|---|---|---|
 | `train.csv` | `ad901b61c7e32b9a1556ceb2545ba33bfb86b31c466fb32610e1ec5e7c57ade2` | `ad901b61c7e32b9a1556ceb2545ba33bfb86b31c466fb32610e1ec5e7c57ade2` | ✅ |
 | `val.csv` | `ddfc7f31d6b9c03266bd7fdcadb43a1872d956e14af3dcb503e88225f2d50f11` | `ddfc7f31d6b9c03266bd7fdcadb43a1872d956e14af3dcb503e88225f2d50f11` | ✅ |

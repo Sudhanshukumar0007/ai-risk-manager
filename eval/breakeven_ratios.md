@@ -1,4 +1,4 @@
-# Day 05: Breakeven Ratios
+# Breakeven Ratios & Empirical Validation
 
 ## Closed-Form Breakeven Ratios
 Calculated by setting incremental gain of TP equal to incremental penalty of FP.

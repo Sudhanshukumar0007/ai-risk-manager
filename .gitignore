@@ -23,6 +23,7 @@ models/*.pkl
 
 # Eval artifacts
 eval/*.png
+!eval/threshold_heatmap.png
 eval/*.html
 
 # Ignored artifacts from repo polishing

@@ -156,7 +156,10 @@ async def score_order(
             current = await redis.incr(rl_key)
             if current == 1:
                 await redis.expire(rl_key, 60)
-            if current > 100:
+            
+            import os
+            rate_limit = int(os.getenv("RATE_LIMIT_PER_MIN", 100))
+            if current > rate_limit:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many requests",

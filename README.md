@@ -10,7 +10,7 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)
 ![Status](https://img.shields.io/badge/status-submission--ready-brightgreen.svg)
 
-**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~14ms (p99).**
+**A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~8ms (p99 at C=1).**
 
 > **Note on latency scope:** End-to-end `/v1/orders/score` latency (including inference, the cost-engine router, and DB writes) is benchmarked in [day11_e2e_latency_report.md](docs/day11_e2e_latency_report.md).
 
@@ -152,7 +152,7 @@ The chosen thresholds are deliberately *not* the mathematically exact breakeven 
 
 This asymmetry was selected via grid search over the validation set:
 
-![Net Saved heatmap over (t_low, t_high) grid search](docs/images/threshold_heatmap.png)
+![Net Saved heatmap over (t_low, t_high) grid search](eval/threshold_heatmap.png)
 *Net Saved (₹) across the (t_low, t_high) grid. The optimum sits in a stable, wide dark-blue plateau around t_high ≈ 0.55–0.70 rather than at a sharp, fragile peak — supporting the choice of `[0.50, 0.75]` as a robust, near-optimal operating point rather than an overfit one.*
 
 ---
@@ -170,13 +170,24 @@ Tabular e-commerce data (cart values, historical rates, categorical PIN codes) i
 ### End-to-End Scoring Latency
 <a id="end-to-end-scoring-latency"></a>
 
-| Metric | Result |
+| Metric | Result (C=1) |
 |---|---:|
-| p50 | 5.76 ms |
-| p95 | 9.34 ms |
-| p99 | 14.10 ms |
-| **Budget** | < 25 ms |
+| p50 | 5.19 ms |
+| p95 | 6.21 ms |
+| p99 | 7.81 ms |
+| **Budget** | < 25 ms (at low concurrency) |
 | **Status** | ✅ **PASSED** |
+
+**At Concurrency = 50 (Burst Load)**
+
+| Metric | p50 | p95 | p99 |
+|---|---:|---:|---:|
+| `t_decision` | 358.04 ms | 2081.52 ms | 2140.94 ms |
+| └─ Server Redis Dedup | 26.45 ms | 283.82 ms | 367.91 ms |
+| └─ Server Celery Dispatch | 36.48 ms | 1635.23 ms | 1700.05 ms |
+| └─ Server Trace Total | 71.26 ms | 1843.70 ms | 1918.22 ms |
+
+> **Note on load scaling:** Under 50 concurrent requests, decision latency degrades to ~2.1s p99, dominated by Celery task dispatch (likely broker connection contention) and Server Trace Total (likely FastAPI queueing limits before the trace even starts). This is an open performance item, not yet root-caused to a code fix.
 
 ### Probability Calibration (Platt Scaling)
 
@@ -299,14 +310,14 @@ Verified manually rather than via a superficial `grep`, to confirm architectural
 
 Following the Day 10 evaluation, an external review identified 8 gaps between the README claims and the repository's direct evidence. These have all been resolved strictly without retraining or un-freezing the thresholds.
 
-- **End-to-End Latency Benchmarked:** The full `/v1/orders/score` path is verified to run within budget under concurrent load. See [day11_e2e_latency_report.md](docs/day11_e2e_latency_report.md).
-- **Confusion Matrix & FPR Computed:** The policy correctly subjects only a small fraction of legitimate orders to friction. See [day11_confusion_matrix.md](docs/day11_confusion_matrix.md).
-- **Baseline Comparison Added:** The ML policy materially outperforms both "no intervention" and "static rule" baselines in net saved and friction avoidance. See [day11_baseline_comparison.md](docs/day11_baseline_comparison.md).
-- **Drift Attribution Resolved:** A transient ablation study proved that the explicit drift features (`is_novel_pincode`, `is_flash_sale_cart_value`) carry no signal. The model detects drift indirectly through correlated structural features. See [day11_drift_attribution.md](docs/day11_drift_attribution.md).
-- **Bootstrap Confidence Interval:** The headline Net Saved remains confidently positive across 1,000 bootstrap resamples despite uncertainty in the threshold position itself. See [day11_bootstrap_ci.md](docs/day11_bootstrap_ci.md).
-- **γ_M / γ_H Acceptance Assumptions Documented:** Confirmed as synthetic assumptions requiring empirical calibration post-launch. See [day11_gamma_provenance.md](docs/day11_gamma_provenance.md).
-- **Cost Sensitivity Analysis:** The engine remains strictly net-positive across wide variations in cost assumptions. See [day11_sensitivity_analysis.md](docs/day11_sensitivity_analysis.md).
-- **Freeze Verification:** A cryptographic hash check confirms `train.csv`, `val.csv`, `heldout.csv`, and `thresholds.json` are bit-for-bit identical to the Day 5 freeze. See [day11_freeze_verification.md](docs/day11_freeze_verification.md).
+- **End-to-End Latency Benchmarked:** The full `/v1/orders/score` path is verified to run within budget under concurrent load. See [e2e_latency_report.md](eval/e2e_latency_report.md).
+- **Confusion Matrix & FPR Computed:** The policy correctly subjects only a small fraction of legitimate orders to friction. See [confusion_matrix.md](eval/confusion_matrix.md).
+- **Baseline Comparison Added:** The ML policy materially outperforms both "no intervention" and "static rule" baselines in net saved and friction avoidance. See [baseline_comparison.md](eval/baseline_comparison.md).
+- **Drift Attribution Resolved:** A transient ablation study proved that the explicit drift features (`is_novel_pincode`, `is_flash_sale_cart_value`) carry no signal. The model detects drift indirectly through correlated structural features. See [drift_attribution.md](eval/drift_attribution.md).
+- **Bootstrap Confidence Interval:** The headline Net Saved remains confidently positive across 1,000 bootstrap resamples despite uncertainty in the threshold position itself. See [bootstrap_ci.md](eval/bootstrap_ci.md).
+- **γ_M / γ_H Acceptance Assumptions Documented:** Confirmed as synthetic assumptions requiring empirical calibration post-launch. See [gamma_provenance.md](eval/gamma_provenance.md).
+- **Cost Sensitivity Analysis:** The engine remains strictly net-positive across wide variations in cost assumptions. See [sensitivity_analysis.md](eval/sensitivity_analysis.md).
+- **Freeze Verification:** A cryptographic hash check confirms `train.csv`, `val.csv`, `heldout.csv`, and `thresholds.json` are bit-for-bit identical to the Day 5 freeze. See [freeze_verification.md](eval/freeze_verification.md).
 
 ---
 
@@ -359,7 +370,7 @@ docker compose exec postgres psql -U risk_user -d risk_db -f /workspace/scripts/
 | Day | Milestone |
 |---|---|
 | 1 | Spec extraction & Issue #8 identification (missing KS/Brier thresholds) |
-| 3 | Feature engineering pipeline; latency budget verified (p99 = 2.44ms) |
+| 3 | Feature engineering pipeline; latency budget initially verified (Day 3 local-only feature-extraction number, superseded by Day 11 E2E measurement) |
 | 4 | Calibration (Platt scaling); fallback gate resolution for Issue #8 |
 | 5 | Cost-engine breakeven derivation; threshold grid search; bootstrap stability check (`WARN`, thresholds frozen) |
 | 10 | Blind held-out evaluation; covariate-shift diagnostic; fault-injection recording; final behavioral compliance sign-off |

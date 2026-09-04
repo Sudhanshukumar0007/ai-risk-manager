@@ -220,6 +220,7 @@ async def main():
         f.write(f"| `t_decision` (Total Client) | {d50_1:.3f} | {d95_1:.3f} | {d99_1:.3f} |\n")
         f.write(f"| └─ Server Redis Dedup | {red50_1:.3f} | {red95_1:.3f} | {red99_1:.3f} |\n")
         f.write(f"| └─ Server Celery Dispatch | {cel50_1:.3f} | {cel95_1:.3f} | {cel99_1:.3f} |\n")
+        f.write(f"| └─ Server Trace Total | {tot50_1:.3f} | {tot95_1:.3f} | {tot99_1:.3f} |\n")
         f.write(f"| `t_audit_complete` | {a50_1:.3f} | {a95_1:.3f} | {a99_1:.3f} |\n\n")
         
         f.write("### Concurrency = 50 (1000 reqs)\n")
@@ -228,6 +229,7 @@ async def main():
         f.write(f"| `t_decision` (Total Client) | {d50_50:.3f} | {d95_50:.3f} | {d99_50:.3f} |\n")
         f.write(f"| └─ Server Redis Dedup | {red50_50:.3f} | {red95_50:.3f} | {red99_50:.3f} |\n")
         f.write(f"| └─ Server Celery Dispatch | {cel50_50:.3f} | {cel95_50:.3f} | {cel99_50:.3f} |\n")
+        f.write(f"| └─ Server Trace Total | {tot50_50:.3f} | {tot95_50:.3f} | {tot99_50:.3f} |\n")
         f.write(f"| `t_audit_complete` | {a50_50:.3f} | {a95_50:.3f} | {a99_50:.3f} |\n\n")
         
         f.write("## Behavior under Timeout/Backpressure\n")

@@ -253,19 +253,24 @@ def render_header(latest_order: pd.Series = None) -> None:
         </div>
     </div>
 </div>
+
+<div style="background-color:#1e293b; padding:16px; border-radius:8px; border-left:4px solid #3b82f6; margin-bottom: 24px;">
+    <div style="color:#60a5fa; font-size:0.85rem; font-weight:800; letter-spacing:1px; margin-bottom:4px; text-transform: uppercase;">BLIND HELD-OUT EVALUATION · 1,250 ORDERS</div>
+    <div style="color:#cbd5e1; font-size:1rem; font-weight:500;">Production thresholds frozen: t_low=0.50 · t_high=0.75</div>
+</div>
     """
     render_html(header_html)
 
 
 def render_kpi_row() -> None:
-    """Four metric cards across the top (Hardcoded Evaluation KPIs)."""
-    c1, c2, c3, c4 = st.columns(4)
+    """Five metric cards across the top (Hardcoded Evaluation KPIs + Latency)."""
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         st.markdown("""
         <div data-testid="metric-container" style="border-top: 3px solid #10b981;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <span style="color:#10b981;">🎯</span>
-                <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">Precision (Observed)</label>
+                <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">Precision (Among flagged)</label>
             </div>
             <div style="color:#f8fafc; font-size:2.5rem; font-weight:700; margin-top:8px;">87.1%</div>
             <div style="color:#94a3b8; font-size:0.8rem; margin-top:8px;">TP / (TP + FP)<br/>148 / 170</div>
@@ -287,7 +292,7 @@ def render_kpi_row() -> None:
         <div data-testid="metric-container" style="border-top: 3px solid #f59e0b;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <span style="color:#f59e0b;">⚠️</span>
-                <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">False Positive Rate (Observed)</label>
+                <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">False Positive Rate</label>
             </div>
             <div style="color:#f8fafc; font-size:2.5rem; font-weight:700; margin-top:8px;">2.1%</div>
             <div style="color:#94a3b8; font-size:0.8rem; margin-top:8px;">FP / (FP + TN)<br/>22 / 1,066</div>
@@ -295,13 +300,24 @@ def render_kpi_row() -> None:
         """, unsafe_allow_html=True)
     with c4:
         st.markdown("""
+        <div data-testid="metric-container" style="border-top: 3px solid #ef4444;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="color:#ef4444;">⚡</span>
+                <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">E2E Latency (p99)</label>
+            </div>
+            <div style="color:#f8fafc; font-size:2.5rem; font-weight:700; margin-top:8px;">7.81 ms</div>
+            <div style="color:#94a3b8; font-size:0.8rem; margin-top:8px;">Budget <25ms<br/>Sync decision path</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c5:
+        st.markdown("""
         <div data-testid="metric-container" style="border-top: 3px solid #22c55e;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <span style="color:#22c55e;">💰</span>
                 <label style="color:#94a3b8; font-weight:600; font-size:0.85rem;">Estimated Net Saved</label>
             </div>
             <div style="color:#22c55e; font-size:2.5rem; font-weight:700; margin-top:8px;">₹15,611</div>
-            <div style="color:#94a3b8; font-size:0.8rem; margin-top:8px;">95% CI: ₹12,116 - ₹19,175<br/>Economic estimate</div>
+            <div style="color:#94a3b8; font-size:0.8rem; margin-top:8px;">95% CI: ₹12k - ₹19k<br/>Economic estimate</div>
         </div>
         """, unsafe_allow_html=True)
     st.markdown("<div style='color:#94a3b8; font-size:0.8rem; margin-top:12px; padding-left:4px;'>Frozen held-out evaluation • 1,250 orders • Modeled under stated intervention-response assumptions</div>", unsafe_allow_html=True)
@@ -709,14 +725,25 @@ def render_audit_feed(df: pd.DataFrame) -> None:
     display_df["Top Reason"] = reasons
     
     statuses = []
-    for st_val in display_df.get("explanation_status", []):
-        if pd.isna(st_val): statuses.append("Pending")
-        else: statuses.append(st_val.capitalize())
+    explanations = []
+    for st_val, text_val in zip(display_df.get("explanation_status", []), display_df.get("explanation_text", [])):
+        if pd.isna(st_val): 
+            statuses.append("Pending")
+            explanations.append("")
+        else: 
+            statuses.append(st_val.capitalize())
+            if st_val.lower() == "complete" and not pd.isna(text_val):
+                text_clean = str(text_val).replace('\n', ' ')
+                explanations.append(text_clean[:80] + "..." if len(text_clean) > 80 else text_clean)
+            else:
+                explanations.append("")
+                
     display_df["Explanation Status"] = statuses
+    display_df["Explanation"] = explanations
 
     columns_to_show = [
         "Time", "Order ID", "Risk Score", "Risk Level", "Decision", 
-        "Payment", "Top Reason", "Explanation Status"
+        "Payment", "Top Reason", "Explanation Status", "Explanation"
     ]
     columns_to_show = [c for c in columns_to_show if c in display_df.columns]
 
@@ -750,7 +777,7 @@ def render_audit_feed(df: pd.DataFrame) -> None:
 def check_password() -> bool:
     """Returns `True` if the user had the correct password."""
     def password_entered():
-        if st.session_state["password"] == os.getenv("DASHBOARD_PASSWORD", "risk_admin"):
+        if st.session_state["password"] == os.getenv("DASHBOARD_PASSWORD", "buildathon_secure"):
             st.session_state["password_correct"] = True
             del st.session_state["password"]  
         else:

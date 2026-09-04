@@ -79,16 +79,10 @@ async def handle_razorpay_webhook(
         
 
 
-    # ── 1. Idempotency / Deduplication via Redis fast-path ────────────────
-    if redis is not None:
-        try:
-            from app.core.idempotency import redis_set_nx
-            is_new_in_redis = await redis_set_nx(redis, f"wh_{event_id}")
-            if not is_new_in_redis:
-                logger.info("Webhook %s already processed (Redis cache hit). Ignoring.", event_id)
-                return {"status": "ok"}
-        except Exception as exc:
-            logger.warning("Redis unavailable during webhook dedup check: %s — falling through to Postgres", exc)
+    # ── 1. Idempotency / Deduplication (Postgres Insert-and-Catch) ─────────
+    # Note: As per ADR-002 and adversarial fixes (Gap 1), webhook idempotency completely
+    # bypasses Redis to avoid race conditions. It relies entirely on the PostgreSQL UNIQUE 
+    # constraint on event_id.
 
     # ── 2. Idempotency / Deduplication via Database insert-and-catch ──────
     # State-transition validation

@@ -9,6 +9,9 @@
 ![Celery](https://img.shields.io/badge/Celery-5-37814A.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)
 ![Status](https://img.shields.io/badge/status-submission--ready-brightgreen.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
+**🎥 5-Minute Pitch & Demo Video:** [Watch the demo](https://youtu.be/bNyX_sXmuRY)
 
 **A mathematically-grounded ML backend that dynamically mitigates Return-to-Origin (RTO) losses for Cash-on-Delivery e-commerce — scoring and routing every order through a cost-optimal, three-tier intervention engine in ~8ms (p99 at C=1, scaling to ~2.1s p99 at C=50).**
 
@@ -34,6 +37,7 @@ Built for Buildathon Track 02 as an end-to-end RTO decision engine with frozen e
 - [Observability Dashboard](#-observability-dashboard)
 - [Known Limitations & Next Steps](#-known-limitations--next-steps)
 - [Running Locally](#-running-locally)
+- [License](#license)
 
 ---
 
@@ -99,7 +103,7 @@ Redis stays dedicated to low-latency caching and rate-limiting. RabbitMQ provide
 ### Operational Security & Defense
 
 - **API Rate Limiting:** The synchronous order scoring interface (`POST /v1/orders/score`) is protected against volumetric denial-of-service and credential scraping by a Redis-backed fixed-window rate limiter (100 requests per minute per IP), returning HTTP 429 upon breach.
-- **Dashboard Authentication:** The analytical Streamlit observability dashboard (`/dashboard`) is gated by an authentication barrier verifying credentials against the `DASHBOARD_PASSWORD` environment variable (default: `risk_admin`).
+- **Dashboard Authentication:** The analytical Streamlit observability dashboard (`/dashboard`) is gated by an authentication barrier verifying credentials against the `DASHBOARD_PASSWORD` environment variable (⚠️ **MUST BE CHANGED BEFORE DEPLOYMENT**).
 
 ---
 
@@ -266,6 +270,8 @@ To test production resilience, a synthetic "flash sale" behavior pattern was inj
 | Non-Shifted (`is_novel=0`) | 1,125 | 12.1% | ₹13,104 | ₹11.65 |
 | Shifted (`is_novel=1`) | 125 | 38.4% | ₹2,507 | ₹20.06 |
 
+*(Note: The live dashboard displays 1,251 total orders due to the 1,250 frozen held-out records plus 1 live-scored demo order).*
+
 The model's overall decisions remain effective under the shift: the shifted subset carries ~3x the RTO rate, and the policy's Net Saved per order nearly doubles there (₹20.06 vs ₹11.65), so interventions do intensify where risk is higher.
 
 **However, this is not attributable to the explicit drift-probe features.** The [drift-awareness diagnostic](#drift-awareness-diagnostic) measured **zero marginal SHAP weight** for both `is_novel_pincode` and `is_flash_sale_cart_value` — meaning the model is not directly using the two features designed to signal novelty. The improved performance on the shifted subset is more likely explained by other correlated features (e.g. address/hub-distance signals for new pincodes) picking up the same risk indirectly, rather than the model having learned an explicit "this is a drifted pincode" representation. This distinction matters and is documented in [Known Limitations & Next Steps](#-known-limitations--next-steps).
@@ -371,6 +377,27 @@ docker compose up -d --build
 docker compose exec postgres psql -U risk_user -d risk_db -f /workspace/scripts/init-test-db.sql
 ```
 
+### Quick API Sanity Check
+
+Once the cluster is up, you can test the core scoring endpoint directly:
+
+```bash
+curl -X POST http://localhost:8000/v1/orders/score \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "demo_123",
+    "customer_id": "cust_456",
+    "pincode": "560001",
+    "cart_value": 2499.00,
+    "is_cod": true,
+    "payment_method": "COD",
+    "item_quantity": 2,
+    "device_fingerprint": "dev_abc",
+    "ip_address": "192.168.1.1",
+    "shipping_address": "123 Tech Park, Bangalore"
+  }'
+```
+
 ### Services
 
 | Service | URL |
@@ -381,4 +408,8 @@ docker compose exec postgres psql -U risk_user -d risk_db -f /workspace/scripts/
 
 ---
 
-<p align="center"><i>Built for Buildathon Track 02 — an end-to-end RTO decision engine with frozen blind evaluation, economic routing, reliability testing, and production observability.</i></p>
+<p align="center"><i>Built for Buildathon Track 02 by Sudhanshu Kumar — an end-to-end RTO decision engine with frozen blind evaluation, economic routing, reliability testing, and production observability.</i></p>
+
+## License
+
+This project is licensed under the MIT License.

@@ -818,7 +818,7 @@ def render_sidebar() -> None:
         st.markdown("<div style='color:#cbd5e1; font-size:0.9rem; margin-bottom:12px;'>● Cache</div>", unsafe_allow_html=True)
         st.markdown("<div style='color:#cbd5e1; font-size:0.9rem; margin-bottom:32px;'>● Alerts</div>", unsafe_allow_html=True)
         
-        st.markdown(f"<div style='font-size:0.7rem; color:#64748b;'>Version 1.0.0<br>Build 2025.05.12</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.7rem; color:#64748b;'>Version 1.0.0</div>", unsafe_allow_html=True)
 
 
 def main() -> None:

@@ -141,7 +141,7 @@ def task_4_drift_attribution(df, model, feature_cols, eval_dir, base_dir):
     ablation_model.fit(X_train, y_train)
     
     # Save transiently to an analysis folder, not models/
-    transient_dir = os.path.join(base_dir, "analysis", "day11_ablation_model")
+    transient_dir = os.path.join(base_dir, "analysis", "ablation_model")
     os.makedirs(transient_dir, exist_ok=True)
     ablation_path = os.path.join(transient_dir, "xgboost_ablation.bin")
     joblib.dump(ablation_model, ablation_path)
